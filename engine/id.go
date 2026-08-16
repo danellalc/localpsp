@@ -24,7 +24,14 @@ func newIDGenerator(seed int64) *idGenerator {
 }
 
 func (g *idGenerator) next(prefix string) string {
+	return prefix + g.nextHex(idLength)
+}
+
+// nextHex returns the next n hex characters (n <= 64) from the same seeded
+// counter stream as next, without a prefix. Lets a caller mint a longer
+// deterministic token, still reproducible from the engine's seed.
+func (g *idGenerator) nextHex(n int) string {
 	g.counter++
 	sum := sha256.Sum256([]byte(strconv.FormatInt(g.seed, 10) + ":" + strconv.FormatUint(g.counter, 10)))
-	return prefix + hex.EncodeToString(sum[:])[:idLength]
+	return hex.EncodeToString(sum[:])[:n]
 }

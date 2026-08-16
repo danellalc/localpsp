@@ -20,7 +20,9 @@ const schema = `
 CREATE TABLE IF NOT EXISTS customers (
 	id TEXT PRIMARY KEY,
 	name TEXT NOT NULL,
-	email TEXT NOT NULL
+	email TEXT NOT NULL,
+	tax_id TEXT NOT NULL,
+	created_at TEXT NOT NULL
 );
 
 CREATE TABLE IF NOT EXISTS charges (
@@ -39,6 +41,8 @@ CREATE TABLE IF NOT EXISTS subscriptions (
 	customer_id TEXT NOT NULL,
 	billing_type TEXT NOT NULL,
 	interval TEXT NOT NULL,
+	amount INTEGER NOT NULL,
+	next_due_date TEXT NOT NULL,
 	created_at TEXT NOT NULL
 );
 `
@@ -82,8 +86,8 @@ func parseTime(s string) (time.Time, error) {
 
 func (s *store) insertCustomer(ctx context.Context, c *Customer) error {
 	_, err := s.db.ExecContext(ctx,
-		`INSERT INTO customers (id, name, email) VALUES (?, ?, ?)`,
-		c.ID, c.Name, c.Email,
+		`INSERT INTO customers (id, name, email, tax_id, created_at) VALUES (?, ?, ?, ?, ?)`,
+		c.ID, c.Name, c.Email, c.TaxID, formatTime(c.CreatedAt),
 	)
 	if err != nil {
 		return fmt.Errorf("insert customer %s: %w", c.ID, err)
@@ -93,14 +97,19 @@ func (s *store) insertCustomer(ctx context.Context, c *Customer) error {
 
 func (s *store) getCustomer(ctx context.Context, id string) (*Customer, error) {
 	row := s.db.QueryRowContext(ctx,
-		`SELECT id, name, email FROM customers WHERE id = ?`, id,
+		`SELECT id, name, email, tax_id, created_at FROM customers WHERE id = ?`, id,
 	)
 	c := &Customer{}
-	if err := row.Scan(&c.ID, &c.Name, &c.Email); err != nil {
+	var createdAt string
+	if err := row.Scan(&c.ID, &c.Name, &c.Email, &c.TaxID, &createdAt); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return nil, fmt.Errorf("customer %s: %w", id, ErrCustomerNotFound)
 		}
 		return nil, fmt.Errorf("get customer %s: %w", id, err)
+	}
+	var err error
+	if c.CreatedAt, err = parseTime(createdAt); err != nil {
+		return nil, fmt.Errorf("parse customer %s created at: %w", c.ID, err)
 	}
 	return c, nil
 }
@@ -255,9 +264,10 @@ func scanCharge(row rowScanner) (*Charge, error) {
 
 func (s *store) insertSubscription(ctx context.Context, sub *Subscription) error {
 	_, err := s.db.ExecContext(ctx,
-		`INSERT INTO subscriptions (id, customer_id, billing_type, interval, created_at)
-		 VALUES (?, ?, ?, ?, ?)`,
-		sub.ID, sub.CustomerID, string(sub.BillingType), string(sub.Interval), formatTime(sub.CreatedAt),
+		`INSERT INTO subscriptions (id, customer_id, billing_type, interval, amount, next_due_date, created_at)
+		 VALUES (?, ?, ?, ?, ?, ?, ?)`,
+		sub.ID, sub.CustomerID, string(sub.BillingType), string(sub.Interval),
+		sub.Amount, formatTime(sub.NextDueDate), formatTime(sub.CreatedAt),
 	)
 	if err != nil {
 		return fmt.Errorf("insert subscription %s: %w", sub.ID, err)
@@ -267,11 +277,12 @@ func (s *store) insertSubscription(ctx context.Context, sub *Subscription) error
 
 func (s *store) getSubscription(ctx context.Context, id string) (*Subscription, error) {
 	row := s.db.QueryRowContext(ctx,
-		`SELECT id, customer_id, billing_type, interval, created_at FROM subscriptions WHERE id = ?`, id,
+		`SELECT id, customer_id, billing_type, interval, amount, next_due_date, created_at
+		 FROM subscriptions WHERE id = ?`, id,
 	)
 	sub := &Subscription{}
-	var billingType, interval, createdAt string
-	err := row.Scan(&sub.ID, &sub.CustomerID, &billingType, &interval, &createdAt)
+	var billingType, interval, nextDueDate, createdAt string
+	err := row.Scan(&sub.ID, &sub.CustomerID, &billingType, &interval, &sub.Amount, &nextDueDate, &createdAt)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return nil, fmt.Errorf("subscription %s: %w", id, ErrSubscriptionNotFound)
@@ -280,6 +291,9 @@ func (s *store) getSubscription(ctx context.Context, id string) (*Subscription, 
 	}
 	sub.BillingType = BillingType(billingType)
 	sub.Interval = Interval(interval)
+	if sub.NextDueDate, err = parseTime(nextDueDate); err != nil {
+		return nil, fmt.Errorf("parse subscription %s next due date: %w", sub.ID, err)
+	}
 	if sub.CreatedAt, err = parseTime(createdAt); err != nil {
 		return nil, fmt.Errorf("parse subscription %s created at: %w", sub.ID, err)
 	}

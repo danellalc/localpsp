@@ -67,10 +67,32 @@ func (e *Engine) Now() time.Time {
 	return e.clock.Now()
 }
 
+// NextID returns a new id deterministically derived from the engine's
+// seed and internal call counter, prefixed with prefix. Exposed so a
+// provider facade can mint its own ids (like a webhook or an outbound
+// event) from the same deterministic source as the engine's own entities,
+// instead of an unseeded random source that would break reproducibility.
+func (e *Engine) NextID(prefix string) string {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	return e.ids.next(prefix)
+}
+
+// NextToken returns a new opaque, deterministically derived hex string,
+// long enough to stand in for an auto-generated secret (like Asaas's
+// auto-generated webhook auth token) while keeping a run fully
+// reproducible from its seed.
+func (e *Engine) NextToken() string {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	return e.ids.nextHex(40)
+}
+
 // CreateCustomerInput is the input to CreateCustomer.
 type CreateCustomerInput struct {
 	Name  string
 	Email string
+	TaxID string
 }
 
 // CreateCustomer registers a new customer and assigns it a seeded id.
@@ -79,9 +101,11 @@ func (e *Engine) CreateCustomer(ctx context.Context, in CreateCustomerInput) (*C
 	defer e.mu.Unlock()
 
 	c := &Customer{
-		ID:    e.ids.next("cus_"),
-		Name:  in.Name,
-		Email: in.Email,
+		ID:        e.ids.next("cus_"),
+		Name:      in.Name,
+		Email:     in.Email,
+		TaxID:     in.TaxID,
+		CreatedAt: e.clock.Now(),
 	}
 	if err := e.store.insertCustomer(ctx, c); err != nil {
 		return nil, err
@@ -170,6 +194,8 @@ type CreateSubscriptionInput struct {
 	CustomerID  string
 	BillingType BillingType
 	Interval    Interval
+	Amount      int64
+	NextDueDate time.Time
 }
 
 // CreateSubscription creates a recurring charge grouping for an existing
@@ -193,6 +219,8 @@ func (e *Engine) CreateSubscription(ctx context.Context, in CreateSubscriptionIn
 		CustomerID:  in.CustomerID,
 		BillingType: in.BillingType,
 		Interval:    in.Interval,
+		Amount:      in.Amount,
+		NextDueDate: in.NextDueDate.UTC(),
 		CreatedAt:   e.clock.Now(),
 	}
 	if err := e.store.insertSubscription(ctx, sub); err != nil {

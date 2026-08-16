@@ -89,6 +89,25 @@ func (d *Dispatcher) Enqueue(name string, ev Event) error {
 	return nil
 }
 
+// UpdateEndpoint replaces an already registered endpoint's delivery
+// configuration (URL and signing header) without touching its pending
+// queue, failure count or interrupted state.
+func (d *Dispatcher) UpdateEndpoint(name string, cfg EndpointConfig) error {
+	if cfg.URL == "" {
+		return ErrEmptyURL
+	}
+
+	d.mu.Lock()
+	defer d.mu.Unlock()
+
+	ep, ok := d.endpoints[name]
+	if !ok {
+		return fmt.Errorf("%w: %q", ErrEndpointNotFound, name)
+	}
+	ep.config = cfg
+	return nil
+}
+
 // Reactivate clears an endpoint's interrupted flag and resumes delivery
 // of its pending events, in the order they were originally enqueued.
 func (d *Dispatcher) Reactivate(name string) error {

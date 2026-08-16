@@ -29,13 +29,13 @@ func (i Interval) Valid() bool {
 	}
 }
 
-// Subscription is a minimal recurring charge grouping. Richer fields
-// (amount, next due date, cycle count) belong to a later phase, once the
-// facade actually needs them.
+// Subscription is a recurring charge grouping.
 type Subscription struct {
 	ID          string
 	CustomerID  string
 	BillingType BillingType
 	Interval    Interval
+	Amount      int64
+	NextDueDate time.Time
 	CreatedAt   time.Time
 }

@@ -11,16 +11,20 @@ type BillingType string
 // The billing types a charge can have. PIX and boleto are payment method
 // names shared across every Brazilian provider, not Asaas-specific
 // vocabulary; there is no more neutral term to use here.
+// Undefined lets the payer pick a billing type later (at checkout, once
+// localpsp simulates one); it's a real, confirmed value, not an invented
+// one, see FIDELITY.md.
 const (
 	BillingTypePix        BillingType = "PIX"
 	BillingTypeBoleto     BillingType = "BOLETO"
 	BillingTypeCreditCard BillingType = "CREDIT_CARD"
+	BillingTypeUndefined  BillingType = "UNDEFINED"
 )
 
 // Valid reports whether b is one of the known billing types.
 func (b BillingType) Valid() bool {
 	switch b {
-	case BillingTypePix, BillingTypeBoleto, BillingTypeCreditCard:
+	case BillingTypePix, BillingTypeBoleto, BillingTypeCreditCard, BillingTypeUndefined:
 		return true
 	default:
 		return false
