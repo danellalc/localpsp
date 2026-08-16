@@ -101,3 +101,34 @@ Sourced from docs.asaas.com, checked in English and Portuguese where both exist.
   until real sandbox responses get recorded as golden files under
   `testdata/golden/asaas/v3/` and the facade's tests assert against them byte for byte.
   This is the single biggest open item before this project's fidelity claim is real.
+- **Disclosed gaps in the facade, real fields with no real content behind them yet.**
+  Rather than fabricate a value for something the docs confirm exists but don't
+  describe the shape of, these are left empty/null on purpose:
+  - `invoiceUrl`, `bankSlipUrl`, `pixQrCodeId` on a payment are always `null`. Real
+    Asaas generates an actual invoice page and (for PIX) a real QR code; localpsp has
+    neither.
+  - `city`, `cityName`, `state`, `country` on a customer are never populated. Real
+    Asaas derives them from `postalCode` via its own CEP lookup service; localpsp
+    doesn't touch real external services, so it can't honestly fill these in either.
+  - A subscription's `status` is always `"ACTIVE"` and `checkoutSession` is always
+    `null`: engine has no subscription lifecycle yet (no `EXPIRED`/`INACTIVE`
+    transition exists to drive it).
+  - A refunded charge never gets a `paymentDate`, even though real Asaas keeps
+    reporting the original payment date after a refund. There's no refund route wired
+    up yet, and no separate "first paid at" timestamp in engine to report honestly
+    once one exists (the charge's `UpdatedAt` gets re-stamped by the refund itself, so
+    it can't be reused for this).
+  - The webhook config id's `wh_` prefix is a guess, unlike `pay_`/`cus_`/`sub_`
+    (confirmed from real Asaas examples) and `evt_` (used in the earlier webhook
+    payload example), nothing sourced here shows what a real webhook config id looks
+    like.
+  - HTTP status `200` on every create (customers, payments, subscriptions, webhooks,
+    sandbox confirm) is unconfirmed; no page sourced here states it outright, `200`
+    matches the author's general recollection of Asaas's REST behavior, not a citable
+    quote.
+- **Ids inside delivered webhook payloads are deterministic, on purpose.** An event's
+  `id` and an auto-generated webhook's `id`/`authToken` are minted from the engine's
+  own seeded id source (`Engine.NextID`/`Engine.NextToken`), the same one entity ids
+  come from, specifically so the same seed and call sequence produce byte-identical
+  webhook bodies. An earlier draft of this facade minted them from an unseeded random
+  source; that was a real bug, caught in review, not a design that's still open.
