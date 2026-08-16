@@ -6,18 +6,23 @@ import "time"
 type Interval string
 
 // The intervals a subscription can have. Generic billing vocabulary, not
-// specific to any one provider.
+// specific to any one provider, matches the full set of recurring cycles
+// confirmed against Asaas's own subscription API (see FIDELITY.md).
 const (
-	IntervalWeekly    Interval = "WEEKLY"
-	IntervalMonthly   Interval = "MONTHLY"
-	IntervalQuarterly Interval = "QUARTERLY"
-	IntervalYearly    Interval = "YEARLY"
+	IntervalWeekly       Interval = "WEEKLY"
+	IntervalBiweekly     Interval = "BIWEEKLY"
+	IntervalMonthly      Interval = "MONTHLY"
+	IntervalBimonthly    Interval = "BIMONTHLY"
+	IntervalQuarterly    Interval = "QUARTERLY"
+	IntervalSemiannually Interval = "SEMIANNUALLY"
+	IntervalYearly       Interval = "YEARLY"
 )
 
 // Valid reports whether i is one of the known intervals.
 func (i Interval) Valid() bool {
 	switch i {
-	case IntervalWeekly, IntervalMonthly, IntervalQuarterly, IntervalYearly:
+	case IntervalWeekly, IntervalBiweekly, IntervalMonthly, IntervalBimonthly,
+		IntervalQuarterly, IntervalSemiannually, IntervalYearly:
 		return true
 	default:
 		return false
