@@ -20,6 +20,9 @@ go.work.sum
 .env
 .env.local
 
+# Secrets
+docker-token.txt
+
 # Local SQLite state (--persist)
 *.db
 *.sqlite
