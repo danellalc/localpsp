@@ -28,9 +28,9 @@ go vet ./... && golangci-lint run
 
 ## The three layers
 
-1. `engine` — entities, lifecycles (state machine), virtual clock, seeded ids. Knows NO provider.
-2. `dispatch` — webhook delivery, signatures, retry policy, queue semantics.
-3. `providers/asaas` — HTTP facade translating the real API surface to engine calls.
+1. `engine`: entities, lifecycles (state machine), virtual clock, seeded ids. Knows NO provider.
+2. `dispatch`: webhook delivery, signatures, retry policy, queue semantics.
+3. `providers/asaas`: HTTP facade translating the real API surface to engine calls.
 
 New code belongs to exactly one layer. Provider-specific JSON, field names, event names and signature schemes live ONLY in the facade.
 
