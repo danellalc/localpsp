@@ -1,0 +1,68 @@
+# localpsp
+
+> A fake but stateful local server emulating Brazilian payment providers (Asaas first; Mercado Pago and Efí planned) for development and testing. Same endpoints, same payloads, same webhook signatures as the real API. Stateful: created charges persist and follow real lifecycles. Fires real webhooks at your local app, with the provider's real delivery semantics: retry schedule, duplicate deliveries with the same event id, and Asaas's queue interruption after 15 consecutive failures. Deterministic: same seed and virtual clock produce byte-identical event sequences, built for CI. Like localstripe or LocalStack, but for Brazilian PSPs.
+
+Positioning: develop and run CI against localpsp; homologate against the provider's real sandbox once at the end. It kills the ngrok-plus-sandbox loop during development; it does not replace final homologation.
+
+Sibling projects by the same author: EFCore.AutoSeed (.NET), autoseed (Go).
+
+- Repo: github.com/danellalc/localpsp
+- Distribution: Docker image (danellalc/localpsp) and single static binary
+- Language-agnostic: your app talks HTTP to it; any stack works
+- License: MIT
+- Status: in development
+
+## Quick start
+
+```bash
+docker run -p 8420:8420 danellalc/localpsp
+```
+
+Point your app's Asaas base URL at the emulator:
+
+```
+ASAAS_API_URL=http://localhost:8420/asaas/v3
+```
+
+Your existing integration code (SDK or raw HTTP) works unmodified, including webhook signature verification.
+
+## CLI
+
+```bash
+localpsp trigger payment.confirmed --charge pay_123   # fire a lifecycle event webhook
+localpsp trigger payment.received  --charge pay_123
+localpsp clock advance 3d                              # virtual time; overdue events fire
+localpsp state                                         # entities, deliveries, queue status
+localpsp chaos duplicate-delivery --charge pay_123     # same event id, twice (idempotency test)
+localpsp chaos retry-storm --failures 5                # exercise your backoff handling
+localpsp chaos queue-interrupt                         # simulate Asaas pausing after 15 failures
+localpsp chaos out-of-order                            # CONFIRMED delivered after RECEIVED
+```
+
+## Key behaviors (the reason this exists)
+
+- Webhook delivery counts as successful only on HTTP 2xx; otherwise the real retry schedule runs.
+- After 15 consecutive failures the webhook queue pauses: new events accumulate but are not delivered, mirroring production Asaas. `localpsp state` shows it; reactivation mirrors the real flow.
+- `PAYMENT_CONFIRMED` and `PAYMENT_RECEIVED` are distinct events with realistic timing (card settles D+32 by default on the virtual clock).
+- Deterministic: seed + virtual clock fully determine ids, timestamps, payloads and delivery order.
+
+## Common mistakes when using this tool
+
+- Do not skip final homologation on the real sandbox. localpsp accelerates development; the provider's checklist still applies.
+- Do not use real API keys with localpsp; it accepts any key and never contacts real APIs.
+- Do not test idempotency by triggering the event twice (that creates two events); use `chaos duplicate-delivery`, which re-sends the SAME event id.
+- Do not rely on wall-clock time for lifecycle tests; use `localpsp clock advance`.
+- Check FIDELITY.md for known divergences from the real API before assuming exact parity.
+
+## Not supported
+
+- Real API proxying or traffic recording.
+- Real money movement of any kind.
+- Providers beyond payments. Providers beyond Asaas are roadmap (Mercado Pago v2, Efí v3).
+- Hosted/cloud version.
+
+## Documentation
+
+- README: https://github.com/danellalc/localpsp/blob/main/README.md
+- Architecture: https://github.com/danellalc/localpsp/blob/main/ARCHITECTURE.md
+- Known divergences: https://github.com/danellalc/localpsp/blob/main/FIDELITY.md
