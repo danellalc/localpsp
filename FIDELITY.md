@@ -44,6 +44,42 @@ Sourced from docs.asaas.com, checked in English and Portuguese where both exist.
 - **Webhook config fields**: `authToken`, `url`, `events`, `enabled`, `interrupted`,
   `name`, `email`, `apiVersion`, `sendType`.
   Source: [Criar novo webhook](https://docs.asaas.com/reference/criar-novo-webhook).
+- **Customer fields**: required `name`, `cpfCnpj`. Optional `email`, `phone`,
+  `mobilePhone`, `address`, `addressNumber`, `complement`, `province`, `postalCode`,
+  `externalReference`, `notificationDisabled`, `additionalEmails`,
+  `municipalInscription`, `stateInscription`, `observations`, `groupName`, `company`,
+  `foreignCustomer`. Response adds `object: "customer"`, `id`, `dateCreated`, `city`,
+  `cityName`, `state`, `country`, `personType` (`FISICA` or `JURIDICA`), `deleted`.
+  Source: [Criar novo cliente](https://docs.asaas.com/reference/criar-novo-cliente).
+- **Payment (charge) fields**: required `customer`, `billingType`
+  (`UNDEFINED`/`BOLETO`/`CREDIT_CARD`/`PIX`), `value`, `dueDate`. Optional
+  `description`, `externalReference`, `installmentCount`, `discount`, `interest`,
+  `fine`, `postalService`, `split`, `callback`, among others. Response adds
+  `object: "payment"`, `id`, `dateCreated`, `netValue`, `status`, `paymentDate`,
+  `invoiceUrl`, `bankSlipUrl`, `pixQrCodeId`, `deleted`, `anticipated`, and more.
+  Source: [Criar nova cobrança](https://docs.asaas.com/reference/criar-nova-cobranca),
+  [Create new payment](https://docs.asaas.com/reference/create-new-payment).
+- **Payment status values**: `PENDING`, `RECEIVED`, `CONFIRMED`, `OVERDUE`,
+  `REFUNDED`, `RECEIVED_IN_CASH`, `REFUND_REQUESTED`, `REFUND_IN_PROGRESS`,
+  `CHARGEBACK_REQUESTED`, `CHARGEBACK_DISPUTE`, `AWAITING_CHARGEBACK_REVERSAL`,
+  `DUNNING_REQUESTED`, `DUNNING_RECEIVED`, `AWAITING_RISK_ANALYSIS`. localpsp's
+  engine only models the five that matter for a normal charge lifecycle
+  (`created`/`PENDING`, `confirmed`/`CONFIRMED`, `received`/`RECEIVED`,
+  `overdue`/`OVERDUE`, `refunded`/`REFUNDED`); the rest are chargeback/dunning/risk
+  states outside v1's scope, not modeled yet.
+  Source: [Create new payment](https://docs.asaas.com/reference/create-new-payment).
+- **Sandbox payment confirmation**: `POST /v3/sandbox/payment/{id}/confirm`, sandbox
+  only, empty request body, returns the full updated payment object. This is the
+  mechanism behind the dashboard's "simulate payment received" button, and what
+  localpsp's own payment simulation endpoint mirrors.
+  Source: [(Apenas sandbox) Confirmar o pagamento](https://docs.asaas.com/reference/confirmar-pagamento).
+- **Subscription fields**: required `customer`, `billingType`, `value`, `nextDueDate`,
+  `cycle` (`WEEKLY`/`BIWEEKLY`/`MONTHLY`/`BIMONTHLY`/`QUARTERLY`/`SEMIANNUALLY`/`YEARLY`).
+  Optional `discount`, `interest`, `fine`, `description`, `endDate`, `maxPayments`,
+  `externalReference`, `split`, `callback`. Response adds `object: "subscription"`,
+  `id`, `dateCreated`, `status` (`ACTIVE`/`EXPIRED`/`INACTIVE`), `deleted`,
+  `checkoutSession`. engine.Interval matches the full `cycle` enum.
+  Source: [Criar nova assinatura](https://docs.asaas.com/reference/criar-nova-assinatura).
 
 ## Open, not yet verified
 
@@ -56,3 +92,12 @@ Sourced from docs.asaas.com, checked in English and Portuguese where both exist.
   that up, or from firsthand production observation. Don't treat the exact spacing
   between retries as fidelity-accurate yet, only the 2xx-or-fail policy, the 10 second
   timeout and the 15-failure threshold are confirmed.
+- **The whole `providers/asaas` facade is pending golden files.** Every field listed
+  above comes from Asaas's documentation, summarized by an AI fetch of docs.asaas.com,
+  not from a byte-for-byte recorded sandbox response. Docs can lag or omit fields the
+  real API actually returns (optional fields that are always present in practice,
+  slightly different casing, fields specific to account configuration). Treat the
+  facade's JSON shape as a solid, doc-grounded first pass, not fidelity-verified,
+  until real sandbox responses get recorded as golden files under
+  `testdata/golden/asaas/v3/` and the facade's tests assert against them byte for byte.
+  This is the single biggest open item before this project's fidelity claim is real.
