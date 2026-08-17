@@ -158,10 +158,9 @@ func (s *Server) handleConfirmPayment(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	resp := s.newPaymentResponse(charge)
-	writeJSON(w, http.StatusOK, resp)
+	writeJSON(w, http.StatusOK, s.newPaymentResponse(charge))
 
-	s.fireEvent(eventPaymentConfirmed, resp)
+	s.fireStatusEvent(charge, eventPaymentConfirmed)
 }
 
 // invoiceURL builds a URL that actually resolves against this Server, a

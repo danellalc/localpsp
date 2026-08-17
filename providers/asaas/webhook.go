@@ -9,9 +9,17 @@ import (
 	"sync"
 
 	"github.com/danellalc/localpsp/dispatch"
+	"github.com/danellalc/localpsp/engine"
 )
 
-const eventPaymentConfirmed = "PAYMENT_CONFIRMED"
+// Asaas webhook event names this facade knows how to fire. These are
+// Asaas's own vocabulary (see FIDELITY.md), not localpsp's internal
+// engine.Status values.
+const (
+	eventPaymentConfirmed = "PAYMENT_CONFIRMED"
+	eventPaymentReceived  = "PAYMENT_RECEIVED"
+	eventPaymentOverdue   = "PAYMENT_OVERDUE"
+)
 
 var errWebhookNotFound = errors.New("webhook not found")
 
@@ -89,6 +97,20 @@ func (r *webhookRegistry) subscribers(eventType string) []webhookConfig {
 	return out
 }
 
+// all returns every registered webhook, ordered by id. It's the material
+// the admin state endpoint reports.
+func (r *webhookRegistry) all() []webhookConfig {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	out := make([]webhookConfig, 0, len(r.entries))
+	for _, cfg := range r.entries {
+		out = append(out, *cfg)
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i].ID < out[j].ID })
+	return out
+}
+
 func wantsEvent(events []string, eventType string) bool {
 	if len(events) == 0 {
 		return true
@@ -120,6 +142,16 @@ func (s *Server) fireEvent(eventType string, payment paymentResponse) {
 	for _, sub := range s.webhooks.subscribers(eventType) {
 		_ = s.dispatch.Enqueue(sub.endpointName, dispatch.Event{ID: envelope.ID, Body: body})
 	}
+}
+
+// fireStatusEvent builds the payment response for charge's current state
+// and fires it as eventType. Every place a charge's status change needs to
+// reach subscribed webhooks goes through this one helper. Reused by the
+// sandbox confirm handler, the admin clock/advance handler (PAYMENT_OVERDUE)
+// and the admin trigger handler, so the envelope-building and firing logic
+// lives in exactly one place.
+func (s *Server) fireStatusEvent(charge *engine.Charge, eventType string) {
+	s.fireEvent(eventType, s.newPaymentResponse(charge))
 }
 
 type webhookRequest struct {

@@ -128,4 +128,6 @@ func (s *Server) routes() {
 	s.mux.HandleFunc("GET "+p+"/subscriptions/{id}", s.handleGetSubscription)
 	s.mux.HandleFunc("POST "+p+"/webhooks", s.handleCreateWebhook)
 	s.mux.HandleFunc("PUT "+p+"/webhooks/{id}", s.handleUpdateWebhook)
+
+	s.adminRoutes()
 }

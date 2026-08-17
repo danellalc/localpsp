@@ -42,7 +42,7 @@ func writeEngineError(w http.ResponseWriter, err error) {
 	case errors.Is(err, engine.ErrInvalidAmount):
 		writeError(w, http.StatusBadRequest, "invalid_value", "value must be greater than zero")
 	case errors.Is(err, engine.ErrInvalidTransition):
-		writeError(w, http.StatusBadRequest, "invalid_payment_state", "payment cannot be confirmed from its current status")
+		writeError(w, http.StatusBadRequest, "invalid_payment_state", "payment cannot move to that status from its current status")
 	default:
 		writeError(w, http.StatusInternalServerError, "internal_error", "unexpected error")
 	}
