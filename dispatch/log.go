@@ -13,7 +13,9 @@ type DeliveryAttempt struct {
 	Status  int
 	Success bool
 	// Err is set when no status code was received: a timeout, a
-	// connection error, or the Dispatcher shutting down mid-request.
+	// connection error, the Dispatcher shutting down mid-request, or (see
+	// ErrSimulatedFailure) a chaos-injected synthetic failure that never
+	// touched the network at all.
 	Err error
 }
 

@@ -11,7 +11,7 @@ func (d *Dispatcher) run(name string, ep *endpointState) {
 	defer d.wg.Done()
 
 	for {
-		ev, cfg, ok := d.nextDelivery(ep)
+		ev, cfg, synthetic, ok := d.nextDelivery(ep)
 		if !ok {
 			select {
 			case <-ep.wake:
@@ -21,7 +21,13 @@ func (d *Dispatcher) run(name string, ep *endpointState) {
 			}
 		}
 
-		status, err := d.deliver(cfg, ev)
+		var status int
+		var err error
+		if synthetic {
+			err = ErrSimulatedFailure
+		} else {
+			status, err = d.deliver(cfg, ev)
+		}
 		success := err == nil && status >= 200 && status < 300
 
 		d.recordAttempt(DeliveryAttempt{
@@ -46,15 +52,24 @@ func (d *Dispatcher) run(name string, ep *endpointState) {
 }
 
 // nextDelivery returns the event at the head of ep's queue, unless the
-// endpoint is interrupted or has nothing pending.
-func (d *Dispatcher) nextDelivery(ep *endpointState) (Event, EndpointConfig, bool) {
+// endpoint is interrupted or has nothing pending. synthetic reports
+// whether this attempt owes a chaos-injected failure instead of a real
+// HTTP call; when it does, one is consumed from ep's counter in the same
+// locked section that hands out the event, so this decision can never
+// race a concurrent InjectFailures call or land on an attempt that's
+// already in flight.
+func (d *Dispatcher) nextDelivery(ep *endpointState) (ev Event, cfg EndpointConfig, synthetic, ok bool) {
 	d.mu.Lock()
 	defer d.mu.Unlock()
 
 	if ep.interrupted || len(ep.pending) == 0 {
-		return Event{}, EndpointConfig{}, false
+		return Event{}, EndpointConfig{}, false, false
 	}
-	return ep.pending[0], ep.config, true
+	if ep.syntheticFailures > 0 {
+		ep.syntheticFailures--
+		synthetic = true
+	}
+	return ep.pending[0], ep.config, synthetic, true
 }
 
 // finishAttempt applies the outcome of a delivery attempt to ep's state:

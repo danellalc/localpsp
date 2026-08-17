@@ -30,6 +30,7 @@ type endpointState struct {
 	consecutiveFailures int
 	interrupted         bool
 	wake                chan struct{}
+	syntheticFailures   int
 }
 
 // RegisterEndpoint adds a named webhook destination and starts its
@@ -122,6 +123,27 @@ func (d *Dispatcher) Reactivate(name string) error {
 	d.mu.Unlock()
 
 	wake(ep)
+	return nil
+}
+
+// InjectFailures sets how many of the named endpoint's next delivery
+// attempts fail synthetically: each one goes through the exact same
+// recordAttempt/finishAttempt path a real failure takes (so it counts
+// toward the consecutive-failure streak and can trip queue interruption
+// just like a real outage), but never makes a real HTTP call. It's the
+// mechanism behind chaos retry-storm and chaos queue-interrupt. Once the
+// counter reaches zero, delivery resumes making real HTTP calls. Calling
+// it again before the counter runs out replaces the remaining count
+// rather than adding to it.
+func (d *Dispatcher) InjectFailures(name string, n int) error {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+
+	ep, ok := d.endpoints[name]
+	if !ok {
+		return fmt.Errorf("%w: %q", ErrEndpointNotFound, name)
+	}
+	ep.syntheticFailures = n
 	return nil
 }
 

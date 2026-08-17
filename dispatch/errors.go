@@ -11,4 +11,5 @@ var (
 	ErrEmptyURL          = errors.New("endpoint url must not be empty")
 	ErrEmptyEventID      = errors.New("event id must not be empty")
 	ErrDispatcherClosed  = errors.New("dispatcher is closed")
+	ErrSimulatedFailure  = errors.New("chaos: simulated failure")
 )
