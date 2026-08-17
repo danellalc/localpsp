@@ -531,7 +531,13 @@ func TestCloseStopsDelivery(t *testing.T) {
 	}))
 	t.Cleanup(server.Close)
 
-	d := New(Options{RetryInterval: 5 * time.Millisecond})
+	// RetryInterval is deliberately generous here, not the usual few
+	// milliseconds: this test only needs one attempt to happen, then
+	// Close to land before a second one is even attempted. A short
+	// interval close to waitFor's own polling granularity risked the
+	// retry timer firing in the same window as the Close call under
+	// load, which is what this test is checking never happens.
+	d := New(Options{RetryInterval: 200 * time.Millisecond})
 	if err := d.RegisterEndpoint("primary", EndpointConfig{URL: server.URL}); err != nil {
 		t.Fatalf("RegisterEndpoint() error = %v", err)
 	}
