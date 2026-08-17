@@ -65,7 +65,7 @@ Same seed, same everything. All ids derive from the seed (`pay_` + seeded hash),
 
 **Why chaos is first-class, not an afterthought.** The API-mirroring part is table stakes (any OpenAPI mocker does 60% of it). The moat is operational behavior: queue interruption, duplicates, retry storms (knowledge that comes from operating payments in production, not from reading docs).
 
-**Why Asaas first.** The author integrates it this month (Selar, desapega.do), dogfooding from week one. It also has the best-documented webhook semantics to mirror.
+**Why Asaas first.** The author integrates it this month (desapega.do), dogfooding from week one. It also has the best-documented webhook semantics to mirror.
 
 **Why SQLite embedded.** Zero-dependency container, `--persist` for local dev sessions, `:memory:` for CI speed. State small enough that anything heavier is ceremony.
 
