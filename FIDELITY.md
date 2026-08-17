@@ -104,9 +104,14 @@ Sourced from docs.asaas.com, checked in English and Portuguese where both exist.
 - **Disclosed gaps in the facade, real fields with no real content behind them yet.**
   Rather than fabricate a value for something the docs confirm exists but don't
   describe the shape of, these are left empty/null on purpose:
-  - `invoiceUrl`, `bankSlipUrl`, `pixQrCodeId` on a payment are always `null`. Real
-    Asaas generates an actual invoice page and (for PIX) a real QR code; localpsp has
-    neither.
+  - `invoiceUrl` on a payment points back at localpsp's own `GET .../invoices/{id}`,
+    which shows the payment's live JSON state, not a real hosted checkout page (real
+    Asaas has an actual invoice UI with PIX/boleto/card options; localpsp doesn't
+    render one). It's a real, resolvable URL, checked against desapega.do's actual
+    Asaas client code, which reads this field to redirect the user, an empty one broke
+    that redirect. `bankSlipUrl` and `pixQrCodeId` are still always `null`: those would
+    need to fabricate an actual boleto number or PIX QR payload, which nothing sourced
+    here describes the real shape of.
   - `city`, `cityName`, `state`, `country` on a customer are never populated. Real
     Asaas derives them from `postalCode` via its own CEP lookup service; localpsp
     doesn't touch real external services, so it can't honestly fill these in either.
