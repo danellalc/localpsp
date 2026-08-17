@@ -99,13 +99,46 @@ func (s *store) getCustomer(ctx context.Context, id string) (*Customer, error) {
 	row := s.db.QueryRowContext(ctx,
 		`SELECT id, name, email, tax_id, created_at FROM customers WHERE id = ?`, id,
 	)
-	c := &Customer{}
-	var createdAt string
-	if err := row.Scan(&c.ID, &c.Name, &c.Email, &c.TaxID, &createdAt); err != nil {
+	c, err := scanCustomer(row)
+	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return nil, fmt.Errorf("customer %s: %w", id, ErrCustomerNotFound)
 		}
 		return nil, fmt.Errorf("get customer %s: %w", id, err)
+	}
+	return c, nil
+}
+
+// listCustomers returns every customer, ordered by id so the result is
+// stable across runs.
+func (s *store) listCustomers(ctx context.Context) ([]*Customer, error) {
+	rows, err := s.db.QueryContext(ctx,
+		`SELECT id, name, email, tax_id, created_at FROM customers ORDER BY id ASC`,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("list customers: %w", err)
+	}
+	defer func() { _ = rows.Close() }()
+
+	customers := make([]*Customer, 0)
+	for rows.Next() {
+		c, err := scanCustomer(rows)
+		if err != nil {
+			return nil, err
+		}
+		customers = append(customers, c)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("list customers: %w", err)
+	}
+	return customers, nil
+}
+
+func scanCustomer(row rowScanner) (*Customer, error) {
+	c := &Customer{}
+	var createdAt string
+	if err := row.Scan(&c.ID, &c.Name, &c.Email, &c.TaxID, &createdAt); err != nil {
+		return nil, err
 	}
 	var err error
 	if c.CreatedAt, err = parseTime(createdAt); err != nil {
@@ -140,6 +173,32 @@ func (s *store) getCharge(ctx context.Context, id string) (*Charge, error) {
 		return nil, err
 	}
 	return c, nil
+}
+
+// listCharges returns every charge, ordered by id so the result is stable
+// across runs.
+func (s *store) listCharges(ctx context.Context) ([]*Charge, error) {
+	rows, err := s.db.QueryContext(ctx,
+		`SELECT id, customer_id, billing_type, amount, due_date, status, created_at, updated_at
+		 FROM charges ORDER BY id ASC`,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("list charges: %w", err)
+	}
+	defer func() { _ = rows.Close() }()
+
+	charges := make([]*Charge, 0)
+	for rows.Next() {
+		c, err := scanCharge(rows)
+		if err != nil {
+			return nil, err
+		}
+		charges = append(charges, c)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("list charges: %w", err)
+	}
+	return charges, nil
 }
 
 // execer is satisfied by both *sql.DB and *sql.Tx, so a single update
@@ -280,14 +339,48 @@ func (s *store) getSubscription(ctx context.Context, id string) (*Subscription, 
 		`SELECT id, customer_id, billing_type, interval, amount, next_due_date, created_at
 		 FROM subscriptions WHERE id = ?`, id,
 	)
-	sub := &Subscription{}
-	var billingType, interval, nextDueDate, createdAt string
-	err := row.Scan(&sub.ID, &sub.CustomerID, &billingType, &interval, &sub.Amount, &nextDueDate, &createdAt)
+	sub, err := scanSubscription(row)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return nil, fmt.Errorf("subscription %s: %w", id, ErrSubscriptionNotFound)
 		}
 		return nil, fmt.Errorf("get subscription %s: %w", id, err)
+	}
+	return sub, nil
+}
+
+// listSubscriptions returns every subscription, ordered by id so the
+// result is stable across runs.
+func (s *store) listSubscriptions(ctx context.Context) ([]*Subscription, error) {
+	rows, err := s.db.QueryContext(ctx,
+		`SELECT id, customer_id, billing_type, interval, amount, next_due_date, created_at
+		 FROM subscriptions ORDER BY id ASC`,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("list subscriptions: %w", err)
+	}
+	defer func() { _ = rows.Close() }()
+
+	subs := make([]*Subscription, 0)
+	for rows.Next() {
+		sub, err := scanSubscription(rows)
+		if err != nil {
+			return nil, fmt.Errorf("list subscriptions: %w", err)
+		}
+		subs = append(subs, sub)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("list subscriptions: %w", err)
+	}
+	return subs, nil
+}
+
+func scanSubscription(row rowScanner) (*Subscription, error) {
+	sub := &Subscription{}
+	var billingType, interval, nextDueDate, createdAt string
+	err := row.Scan(&sub.ID, &sub.CustomerID, &billingType, &interval, &sub.Amount, &nextDueDate, &createdAt)
+	if err != nil {
+		return nil, err
 	}
 	sub.BillingType = BillingType(billingType)
 	sub.Interval = Interval(interval)

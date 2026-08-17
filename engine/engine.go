@@ -121,6 +121,14 @@ func (e *Engine) GetCustomer(ctx context.Context, id string) (*Customer, error) 
 	return e.store.getCustomer(ctx, id)
 }
 
+// ListCustomers returns every customer, ordered by id.
+func (e *Engine) ListCustomers(ctx context.Context) ([]*Customer, error) {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+
+	return e.store.listCustomers(ctx)
+}
+
 // CreateChargeInput is the input to CreateCharge.
 type CreateChargeInput struct {
 	CustomerID  string
@@ -167,6 +175,14 @@ func (e *Engine) GetCharge(ctx context.Context, id string) (*Charge, error) {
 	defer e.mu.Unlock()
 
 	return e.store.getCharge(ctx, id)
+}
+
+// ListCharges returns every charge, ordered by id.
+func (e *Engine) ListCharges(ctx context.Context) ([]*Charge, error) {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+
+	return e.store.listCharges(ctx)
 }
 
 // TransitionCharge moves a charge to a new status, stamped with the
@@ -237,12 +253,26 @@ func (e *Engine) GetSubscription(ctx context.Context, id string) (*Subscription,
 	return e.store.getSubscription(ctx, id)
 }
 
+// ListSubscriptions returns every subscription, ordered by id.
+func (e *Engine) ListSubscriptions(ctx context.Context) ([]*Subscription, error) {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+
+	return e.store.listSubscriptions(ctx)
+}
+
 // Transition records a single charge status change caused by AdvanceClock.
+// Charge is the charge exactly as it stood right after this transition,
+// callers that need the resulting state (like firing a webhook) should
+// use it instead of a fresh GetCharge: fetching again after AdvanceClock
+// returns risks racing a second, concurrent transition on the same
+// charge and reporting the wrong status.
 type Transition struct {
 	ChargeID string
 	From     Status
 	To       Status
 	At       time.Time
+	Charge   *Charge
 }
 
 // AdvanceClock moves the virtual clock forward by d and applies whatever
@@ -280,6 +310,7 @@ func (e *Engine) AdvanceClock(ctx context.Context, d time.Duration) ([]Transitio
 			From:     from,
 			To:       c.Status,
 			At:       now,
+			Charge:   c,
 		})
 	}
 

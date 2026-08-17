@@ -61,6 +61,19 @@ func TestChargeGoesOverdueWhenClockPassesDueDate(t *testing.T) {
 	if !got.At.Equal(start.Add(72 * time.Hour)) {
 		t.Fatalf("transition.At = %v, want %v", got.At, start.Add(72*time.Hour))
 	}
+	// Charge must reflect the transition's own resulting state, callers
+	// (like the facade firing a webhook) rely on this instead of a fresh
+	// GetCharge, which could race a second, concurrent transition on the
+	// same charge and report the wrong status.
+	if got.Charge == nil {
+		t.Fatal("transition.Charge = nil, want the resulting charge")
+	}
+	if got.Charge.Status != StatusOverdue {
+		t.Errorf("transition.Charge.Status = %s, want %s", got.Charge.Status, StatusOverdue)
+	}
+	if got.Charge.ID != charge.ID {
+		t.Errorf("transition.Charge.ID = %s, want %s", got.Charge.ID, charge.ID)
+	}
 
 	stored, err := e.GetCharge(ctx, charge.ID)
 	if err != nil {
