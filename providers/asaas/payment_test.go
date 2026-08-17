@@ -154,6 +154,55 @@ func TestCreatePaymentValidation(t *testing.T) {
 	}
 }
 
+// TestPaymentEchoesDescriptionAndInvoiceURL guards against two real gaps
+// caught while checking this facade against desapega.do's actual Asaas
+// client: description/externalReference were silently dropped (accepted
+// but never echoed back), and invoiceUrl was always null even though real
+// client code (desapega.do's AsaasGateway.CriarCobranca) reads it to
+// build the checkout redirect.
+func TestPaymentEchoesDescriptionAndInvoiceURL(t *testing.T) {
+	_, httpSrv := newTestServer(t, 1, dispatch.Options{})
+	custID := createTestCustomer(t, httpSrv)
+
+	resp := request(t, http.MethodPost, httpSrv.URL+testBasePath+"/payments", paymentRequest{
+		Customer:          custID,
+		BillingType:       "PIX",
+		Value:             10,
+		DueDate:           "2026-02-01",
+		Description:       "Desapega.do, plano Radar",
+		ExternalReference: "pagamento-123",
+	})
+	if resp.status != http.StatusOK {
+		t.Fatalf("status = %d, want %d: %s", resp.status, http.StatusOK, resp.body)
+	}
+	var pay paymentResponse
+	resp.decode(t, &pay)
+
+	if pay.Description != "Desapega.do, plano Radar" {
+		t.Errorf("description = %q, want %q", pay.Description, "Desapega.do, plano Radar")
+	}
+	if pay.ExternalReference != "pagamento-123" {
+		t.Errorf("externalReference = %q, want %q", pay.ExternalReference, "pagamento-123")
+	}
+	if pay.InvoiceURL == nil {
+		t.Fatal("invoiceUrl = nil, want a resolvable URL")
+	}
+	wantURL := httpSrv.URL + testBasePath + "/invoices/" + pay.ID
+	if *pay.InvoiceURL != wantURL {
+		t.Errorf("invoiceUrl = %q, want %q", *pay.InvoiceURL, wantURL)
+	}
+
+	invoiceResp := request(t, http.MethodGet, *pay.InvoiceURL, nil)
+	if invoiceResp.status != http.StatusOK {
+		t.Fatalf("GET invoiceUrl status = %d, want %d: %s", invoiceResp.status, http.StatusOK, invoiceResp.body)
+	}
+	var invoice paymentResponse
+	invoiceResp.decode(t, &invoice)
+	if invoice.ID != pay.ID {
+		t.Errorf("invoice id = %q, want %q", invoice.ID, pay.ID)
+	}
+}
+
 // TestCreatePaymentAcceptsUndefinedBillingType guards against a real bug
 // caught in review: UNDEFINED is a confirmed, real Asaas billingType (see
 // FIDELITY.md), it lets the payer choose at checkout, it was wrongly

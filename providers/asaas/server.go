@@ -21,22 +21,30 @@ type Server struct {
 	engine           *engine.Engine
 	dispatch         *dispatch.Dispatcher
 	basePath         string
+	publicURL        string
 	mux              *http.ServeMux
 	webhooks         *webhookRegistry
 	customerProfiles *customerProfileStore
+	paymentMeta      *paymentMetaStore
 }
 
 // NewServer builds a Server that mounts every Asaas v3 route under
 // basePath (for example "/asaas/v3"). eng and disp must already be
 // constructed and are used as-is; NewServer does not take ownership of
-// their lifecycle, the caller still closes them.
-func NewServer(eng *engine.Engine, disp *dispatch.Dispatcher, basePath string) *Server {
+// their lifecycle, the caller still closes them. publicURL is the
+// scheme+host(+port) this Server is actually reachable at (for example
+// "http://localhost:8420"), used to build a real, resolvable invoiceUrl
+// on a payment; pass "" if that's not needed (a real invoiceUrl won't
+// resolve, but nothing else in this package depends on it).
+func NewServer(eng *engine.Engine, disp *dispatch.Dispatcher, basePath, publicURL string) *Server {
 	s := &Server{
 		engine:           eng,
 		dispatch:         disp,
 		basePath:         normalizeBasePath(basePath),
+		publicURL:        strings.TrimSuffix(publicURL, "/"),
 		webhooks:         newWebhookRegistry(),
 		customerProfiles: newCustomerProfileStore(),
+		paymentMeta:      newPaymentMetaStore(),
 	}
 	s.mux = http.NewServeMux()
 	s.routes()
@@ -114,6 +122,7 @@ func (s *Server) routes() {
 	s.mux.HandleFunc("GET "+p+"/customers/{id}", s.handleGetCustomer)
 	s.mux.HandleFunc("POST "+p+"/payments", s.handleCreatePayment)
 	s.mux.HandleFunc("GET "+p+"/payments/{id}", s.handleGetPayment)
+	s.mux.HandleFunc("GET "+p+"/invoices/{id}", s.handleGetPayment)
 	s.mux.HandleFunc("POST "+p+"/sandbox/payment/{id}/confirm", s.handleConfirmPayment)
 	s.mux.HandleFunc("POST "+p+"/subscriptions", s.handleCreateSubscription)
 	s.mux.HandleFunc("GET "+p+"/subscriptions/{id}", s.handleGetSubscription)

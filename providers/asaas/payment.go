@@ -4,33 +4,67 @@ import (
 	"encoding/json"
 	"net/http"
 	"strings"
+	"sync"
 
 	"github.com/danellalc/localpsp/engine"
 )
 
+// paymentMeta holds request fields engine.Charge has no reason to know
+// about: they never affect a charge's lifecycle, only what a GET echoes
+// back. Same reasoning as customerProfile in customer.go.
+type paymentMeta struct {
+	Description       string
+	ExternalReference string
+}
+
+type paymentMetaStore struct {
+	mu   sync.Mutex
+	byID map[string]paymentMeta
+}
+
+func newPaymentMetaStore() *paymentMetaStore {
+	return &paymentMetaStore{byID: make(map[string]paymentMeta)}
+}
+
+func (s *paymentMetaStore) set(id string, m paymentMeta) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.byID[id] = m
+}
+
+func (s *paymentMetaStore) get(id string) paymentMeta {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.byID[id]
+}
+
 type paymentRequest struct {
-	Customer    string  `json:"customer"`
-	BillingType string  `json:"billingType"`
-	Value       float64 `json:"value"`
-	DueDate     string  `json:"dueDate"`
+	Customer          string  `json:"customer"`
+	BillingType       string  `json:"billingType"`
+	Value             float64 `json:"value"`
+	DueDate           string  `json:"dueDate"`
+	Description       string  `json:"description,omitempty"`
+	ExternalReference string  `json:"externalReference,omitempty"`
 }
 
 type paymentResponse struct {
-	Object      string  `json:"object"`
-	ID          string  `json:"id"`
-	DateCreated string  `json:"dateCreated"`
-	Customer    string  `json:"customer"`
-	BillingType string  `json:"billingType"`
-	Value       float64 `json:"value"`
-	NetValue    float64 `json:"netValue"`
-	Status      string  `json:"status"`
-	DueDate     string  `json:"dueDate"`
-	PaymentDate *string `json:"paymentDate"`
-	InvoiceURL  *string `json:"invoiceUrl"`
-	BankSlipURL *string `json:"bankSlipUrl"`
-	PixQrCodeID *string `json:"pixQrCodeId"`
-	Deleted     bool    `json:"deleted"`
-	Anticipated bool    `json:"anticipated"`
+	Object            string  `json:"object"`
+	ID                string  `json:"id"`
+	DateCreated       string  `json:"dateCreated"`
+	Customer          string  `json:"customer"`
+	BillingType       string  `json:"billingType"`
+	Value             float64 `json:"value"`
+	NetValue          float64 `json:"netValue"`
+	Status            string  `json:"status"`
+	DueDate           string  `json:"dueDate"`
+	Description       string  `json:"description,omitempty"`
+	ExternalReference string  `json:"externalReference,omitempty"`
+	PaymentDate       *string `json:"paymentDate"`
+	InvoiceURL        *string `json:"invoiceUrl"`
+	BankSlipURL       *string `json:"bankSlipUrl"`
+	PixQrCodeID       *string `json:"pixQrCodeId"`
+	Deleted           bool    `json:"deleted"`
+	Anticipated       bool    `json:"anticipated"`
 }
 
 func asaasPaymentStatus(status engine.Status) string {
@@ -100,7 +134,12 @@ func (s *Server) handleCreatePayment(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	writeJSON(w, http.StatusOK, newPaymentResponse(charge))
+	s.paymentMeta.set(charge.ID, paymentMeta{
+		Description:       req.Description,
+		ExternalReference: req.ExternalReference,
+	})
+
+	writeJSON(w, http.StatusOK, s.newPaymentResponse(charge))
 }
 
 func (s *Server) handleGetPayment(w http.ResponseWriter, r *http.Request) {
@@ -109,7 +148,7 @@ func (s *Server) handleGetPayment(w http.ResponseWriter, r *http.Request) {
 		writeEngineError(w, err)
 		return
 	}
-	writeJSON(w, http.StatusOK, newPaymentResponse(charge))
+	writeJSON(w, http.StatusOK, s.newPaymentResponse(charge))
 }
 
 func (s *Server) handleConfirmPayment(w http.ResponseWriter, r *http.Request) {
@@ -119,26 +158,42 @@ func (s *Server) handleConfirmPayment(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	resp := newPaymentResponse(charge)
+	resp := s.newPaymentResponse(charge)
 	writeJSON(w, http.StatusOK, resp)
 
 	s.fireEvent(eventPaymentConfirmed, resp)
 }
 
-func newPaymentResponse(c *engine.Charge) paymentResponse {
+// invoiceURL builds a URL that actually resolves against this Server, a
+// stand-in for Asaas's real hosted invoice page. It shows the payment's
+// live JSON state rather than a real checkout UI, localpsp doesn't have
+// one to fabricate, see FIDELITY.md.
+func (s *Server) invoiceURL(chargeID string) *string {
+	if s.publicURL == "" {
+		return nil
+	}
+	url := s.publicURL + s.basePath + "/invoices/" + chargeID
+	return &url
+}
+
+func (s *Server) newPaymentResponse(c *engine.Charge) paymentResponse {
+	meta := s.paymentMeta.get(c.ID)
 	value := centsToReais(c.Amount)
 	resp := paymentResponse{
-		Object:      "payment",
-		ID:          c.ID,
-		DateCreated: formatDateTime(c.CreatedAt),
-		Customer:    c.CustomerID,
-		BillingType: string(c.BillingType),
-		Value:       value,
-		NetValue:    value,
-		Status:      asaasPaymentStatus(c.Status),
-		DueDate:     formatDate(c.DueDate),
-		Deleted:     false,
-		Anticipated: false,
+		Object:            "payment",
+		ID:                c.ID,
+		DateCreated:       formatDateTime(c.CreatedAt),
+		Customer:          c.CustomerID,
+		BillingType:       string(c.BillingType),
+		Value:             value,
+		NetValue:          value,
+		Status:            asaasPaymentStatus(c.Status),
+		DueDate:           formatDate(c.DueDate),
+		Description:       meta.Description,
+		ExternalReference: meta.ExternalReference,
+		InvoiceURL:        s.invoiceURL(c.ID),
+		Deleted:           false,
+		Anticipated:       false,
 	}
 	if paymentDateApplies(c.Status) {
 		d := formatDate(c.UpdatedAt)

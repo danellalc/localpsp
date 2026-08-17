@@ -39,9 +39,12 @@ func newTestServer(t *testing.T, seed int64, dispatchOpts dispatch.Options) (*Se
 		}
 	})
 
-	srv := NewServer(eng, disp, testBasePath)
+	srv := NewServer(eng, disp, testBasePath, "")
 	httpSrv := httptest.NewServer(srv)
 	t.Cleanup(httpSrv.Close)
+	// publicURL isn't known until httptest.NewServer picks its (random)
+	// port, so it's set here rather than passed into NewServer above.
+	srv.publicURL = httpSrv.URL
 
 	return srv, httpSrv
 }
