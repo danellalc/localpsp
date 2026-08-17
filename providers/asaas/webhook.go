@@ -130,18 +130,39 @@ type eventEnvelope struct {
 	Payment     paymentResponse `json:"payment"`
 }
 
-func (s *Server) fireEvent(eventType string, payment paymentResponse) {
+// buildStatusEvent builds the outbound envelope for charge's current state
+// as eventType, minting a fresh, deterministic event id, without
+// enqueuing it anywhere. Split out from fireStatusEvent so chaos
+// out-of-order can build both the CONFIRMED and RECEIVED envelopes ahead
+// of time and then choose their enqueue order independently of the order
+// they were built in.
+func (s *Server) buildStatusEvent(charge *engine.Charge, eventType string) dispatch.Event {
 	envelope := eventEnvelope{
 		ID:          s.mintEventID(),
 		Event:       eventType,
 		DateCreated: formatDateTime(s.engine.Now()),
-		Payment:     payment,
+		Payment:     s.newPaymentResponse(charge),
 	}
 	body, _ := json.Marshal(envelope)
+	return dispatch.Event{ID: envelope.ID, Body: body}
+}
 
-	for _, sub := range s.webhooks.subscribers(eventType) {
-		_ = s.dispatch.Enqueue(sub.endpointName, dispatch.Event{ID: envelope.ID, Body: body})
+// enqueueEvent hands ev to every webhook subscribed to eventType and, if
+// it reached at least one of them, records it as chargeID's last fired
+// event: the material chaos duplicate-delivery and chaos retry-storm
+// resend. It returns the endpoint names ev was actually enqueued to.
+func (s *Server) enqueueEvent(chargeID, eventType string, ev dispatch.Event) []string {
+	subs := s.webhooks.subscribers(eventType)
+	endpoints := make([]string, 0, len(subs))
+	for _, sub := range subs {
+		if err := s.dispatch.Enqueue(sub.endpointName, ev); err == nil {
+			endpoints = append(endpoints, sub.endpointName)
+		}
 	}
+	if len(endpoints) > 0 {
+		s.lastEvents.set(chargeID, lastEvent{Event: ev, Endpoints: endpoints})
+	}
+	return endpoints
 }
 
 // fireStatusEvent builds the payment response for charge's current state
@@ -151,7 +172,8 @@ func (s *Server) fireEvent(eventType string, payment paymentResponse) {
 // and the admin trigger handler, so the envelope-building and firing logic
 // lives in exactly one place.
 func (s *Server) fireStatusEvent(charge *engine.Charge, eventType string) {
-	s.fireEvent(eventType, s.newPaymentResponse(charge))
+	ev := s.buildStatusEvent(charge, eventType)
+	s.enqueueEvent(charge.ID, eventType, ev)
 }
 
 type webhookRequest struct {

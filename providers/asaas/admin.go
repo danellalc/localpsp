@@ -25,6 +25,10 @@ func (s *Server) adminRoutes() {
 	s.mux.HandleFunc("GET /_localpsp/state", s.handleAdminState)
 	s.mux.HandleFunc("POST /_localpsp/clock/advance", s.handleClockAdvance)
 	s.mux.HandleFunc("POST /_localpsp/trigger", s.handleTrigger)
+	s.mux.HandleFunc("POST /_localpsp/chaos/duplicate-delivery", s.handleChaosDuplicateDelivery)
+	s.mux.HandleFunc("POST /_localpsp/chaos/retry-storm", s.handleChaosRetryStorm)
+	s.mux.HandleFunc("POST /_localpsp/chaos/queue-interrupt", s.handleChaosQueueInterrupt)
+	s.mux.HandleFunc("POST /_localpsp/chaos/out-of-order", s.handleChaosOutOfOrder)
 }
 
 type adminCustomer struct {

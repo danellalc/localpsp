@@ -26,6 +26,7 @@ type Server struct {
 	webhooks         *webhookRegistry
 	customerProfiles *customerProfileStore
 	paymentMeta      *paymentMetaStore
+	lastEvents       *lastEventStore
 }
 
 // NewServer builds a Server that mounts every Asaas v3 route under
@@ -45,6 +46,7 @@ func NewServer(eng *engine.Engine, disp *dispatch.Dispatcher, basePath, publicUR
 		webhooks:         newWebhookRegistry(),
 		customerProfiles: newCustomerProfileStore(),
 		paymentMeta:      newPaymentMetaStore(),
+		lastEvents:       newLastEventStore(),
 	}
 	s.mux = http.NewServeMux()
 	s.routes()
