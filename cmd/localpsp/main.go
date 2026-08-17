@@ -24,6 +24,8 @@ func main() {
 		err = runTrigger(os.Args[2:])
 	case "clock":
 		err = runClock(os.Args[2:])
+	case "chaos":
+		err = runChaos(os.Args[2:])
 	case "-h", "--help", "help":
 		fmt.Println(usage())
 		return
@@ -44,8 +46,11 @@ commands:
   state                        show customers, charges and webhook queues from a running server
   trigger <event> --charge ID  fire a payment lifecycle event against a charge
   clock advance <duration>     move the virtual clock forward
+  chaos <scenario> --charge ID fire one of the chaos scenarios below
 
 events for trigger: payment.confirmed, payment.received
 durations for clock advance are Go duration strings, like 72h or 30m, or a
-number of days, like 3d`
+number of days, like 3d
+
+` + chaosUsage()
 }
