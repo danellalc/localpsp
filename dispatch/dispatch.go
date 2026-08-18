@@ -99,6 +99,17 @@ func New(opts Options) *Dispatcher {
 	}
 }
 
+// FailureThreshold returns how many consecutive failures this Dispatcher
+// interrupts an endpoint's queue after: the effective value once Options'
+// zero value has been resolved to DefaultFailureThreshold, fixed for the
+// Dispatcher's whole lifetime. Callers that need to inject a specific
+// number of failures without accidentally tripping (or falling short of)
+// a real interruption, like chaos retry-storm, need this to know where
+// that line actually is.
+func (d *Dispatcher) FailureThreshold() int {
+	return d.failureThreshold
+}
+
 // Close stops every background delivery loop, waits for them to return
 // and releases pooled connections. It's safe to call more than once.
 func (d *Dispatcher) Close() error {

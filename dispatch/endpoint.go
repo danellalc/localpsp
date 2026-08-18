@@ -78,6 +78,10 @@ func (d *Dispatcher) Enqueue(name string, ev Event) error {
 	}
 
 	d.mu.Lock()
+	if d.closed {
+		d.mu.Unlock()
+		return ErrDispatcherClosed
+	}
 	ep, ok := d.endpoints[name]
 	if !ok {
 		d.mu.Unlock()
@@ -101,6 +105,9 @@ func (d *Dispatcher) UpdateEndpoint(name string, cfg EndpointConfig) error {
 	d.mu.Lock()
 	defer d.mu.Unlock()
 
+	if d.closed {
+		return ErrDispatcherClosed
+	}
 	ep, ok := d.endpoints[name]
 	if !ok {
 		return fmt.Errorf("%w: %q", ErrEndpointNotFound, name)
@@ -113,6 +120,10 @@ func (d *Dispatcher) UpdateEndpoint(name string, cfg EndpointConfig) error {
 // of its pending events, in the order they were originally enqueued.
 func (d *Dispatcher) Reactivate(name string) error {
 	d.mu.Lock()
+	if d.closed {
+		d.mu.Unlock()
+		return ErrDispatcherClosed
+	}
 	ep, ok := d.endpoints[name]
 	if !ok {
 		d.mu.Unlock()
@@ -139,6 +150,9 @@ func (d *Dispatcher) InjectFailures(name string, n int) error {
 	d.mu.Lock()
 	defer d.mu.Unlock()
 
+	if d.closed {
+		return ErrDispatcherClosed
+	}
 	ep, ok := d.endpoints[name]
 	if !ok {
 		return fmt.Errorf("%w: %q", ErrEndpointNotFound, name)

@@ -515,6 +515,95 @@ func TestReactivateUnknownEndpoint(t *testing.T) {
 	}
 }
 
+// TestUpdateEndpointReplacesConfig guards Dispatcher.UpdateEndpoint
+// itself, at the dispatch package level: this method previously had no
+// direct test anywhere in this package, only indirect exercise through
+// providers/asaas's own integration tests, so a regression here could
+// ship with a fully green `go test ./dispatch/...`.
+func TestUpdateEndpointReplacesConfig(t *testing.T) {
+	var mu sync.Mutex
+	var gotToken string
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		mu.Lock()
+		gotToken = r.Header.Get("X-Token")
+		mu.Unlock()
+		w.WriteHeader(http.StatusOK)
+	}))
+	t.Cleanup(server.Close)
+
+	d := newTestDispatcher(t, Options{RetryInterval: 5 * time.Millisecond})
+	if err := d.RegisterEndpoint("primary", EndpointConfig{URL: server.URL, HeaderName: "X-Token", HeaderValue: "old"}); err != nil {
+		t.Fatalf("RegisterEndpoint() error = %v", err)
+	}
+
+	if err := d.UpdateEndpoint("primary", EndpointConfig{URL: server.URL, HeaderName: "X-Token", HeaderValue: "new"}); err != nil {
+		t.Fatalf("UpdateEndpoint() error = %v", err)
+	}
+	if err := d.Enqueue("primary", Event{ID: "evt_1", Body: []byte(`{}`)}); err != nil {
+		t.Fatalf("Enqueue() error = %v", err)
+	}
+
+	waitFor(t, 2*time.Second, func() bool {
+		mu.Lock()
+		defer mu.Unlock()
+		return gotToken != ""
+	})
+	mu.Lock()
+	got := gotToken
+	mu.Unlock()
+	if got != "new" {
+		t.Errorf("delivered header = %q, want %q: UpdateEndpoint's new config must actually take effect", got, "new")
+	}
+}
+
+func TestUpdateEndpointUnknownEndpoint(t *testing.T) {
+	d := newTestDispatcher(t, Options{})
+	err := d.UpdateEndpoint("missing", EndpointConfig{URL: "http://example.test"})
+	if !errors.Is(err, ErrEndpointNotFound) {
+		t.Errorf("UpdateEndpoint() error = %v, want %v", err, ErrEndpointNotFound)
+	}
+}
+
+func TestUpdateEndpointRejectsEmptyURL(t *testing.T) {
+	d := newTestDispatcher(t, Options{})
+	if err := d.RegisterEndpoint("primary", EndpointConfig{URL: "http://example.test"}); err != nil {
+		t.Fatalf("RegisterEndpoint() error = %v", err)
+	}
+	err := d.UpdateEndpoint("primary", EndpointConfig{})
+	if !errors.Is(err, ErrEmptyURL) {
+		t.Errorf("UpdateEndpoint() error = %v, want %v", err, ErrEmptyURL)
+	}
+}
+
+// TestMutatingMethodsRejectAfterClose guards against a real gap caught in
+// review: RegisterEndpoint checks d.closed, but Enqueue, UpdateEndpoint,
+// Reactivate and InjectFailures didn't, so they used to succeed silently
+// against a closed Dispatcher instead of returning the same
+// ErrDispatcherClosed signal, even though nothing was left running to
+// ever act on the change.
+func TestMutatingMethodsRejectAfterClose(t *testing.T) {
+	d := New(Options{})
+	if err := d.RegisterEndpoint("primary", EndpointConfig{URL: "http://example.test"}); err != nil {
+		t.Fatalf("RegisterEndpoint() error = %v", err)
+	}
+	if err := d.Close(); err != nil {
+		t.Fatalf("Close() error = %v", err)
+	}
+
+	if err := d.Enqueue("primary", Event{ID: "evt_1", Body: []byte(`{}`)}); !errors.Is(err, ErrDispatcherClosed) {
+		t.Errorf("Enqueue() after Close error = %v, want %v", err, ErrDispatcherClosed)
+	}
+	if err := d.UpdateEndpoint("primary", EndpointConfig{URL: "http://example.test/2"}); !errors.Is(err, ErrDispatcherClosed) {
+		t.Errorf("UpdateEndpoint() after Close error = %v, want %v", err, ErrDispatcherClosed)
+	}
+	if err := d.Reactivate("primary"); !errors.Is(err, ErrDispatcherClosed) {
+		t.Errorf("Reactivate() after Close error = %v, want %v", err, ErrDispatcherClosed)
+	}
+	if err := d.InjectFailures("primary", 3); !errors.Is(err, ErrDispatcherClosed) {
+		t.Errorf("InjectFailures() after Close error = %v, want %v", err, ErrDispatcherClosed)
+	}
+}
+
 func TestStateUnknownEndpoint(t *testing.T) {
 	d := newTestDispatcher(t, Options{})
 	_, err := d.State("missing")
