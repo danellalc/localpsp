@@ -8,6 +8,11 @@ import (
 	"os"
 )
 
+// version is overridden at build time via -ldflags "-X main.version=v0.1.0",
+// the release workflow does this for every published binary and Docker
+// image. A plain "go build"/"go run" (local dev, "go install") keeps "dev".
+var version = "dev"
+
 func main() {
 	if len(os.Args) < 2 {
 		fmt.Fprintln(os.Stderr, usage())
@@ -26,6 +31,9 @@ func main() {
 		err = runClock(os.Args[2:])
 	case "chaos":
 		err = runChaos(os.Args[2:])
+	case "version", "-v", "--version":
+		fmt.Println("localpsp " + version)
+		return
 	case "-h", "--help", "help":
 		fmt.Println(usage())
 		return
@@ -47,6 +55,7 @@ commands:
   trigger <event> --charge ID  fire a payment lifecycle event against a charge
   clock advance <duration>     move the virtual clock forward
   chaos <scenario> --charge ID fire one of the chaos scenarios below
+  version                      print the localpsp version
 
 events for trigger: payment.confirmed, payment.received
 durations for clock advance are Go duration strings, like 72h or 30m, or a
