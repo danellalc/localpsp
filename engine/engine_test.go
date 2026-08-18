@@ -260,6 +260,29 @@ func TestIDsAreDeterministicForASeed(t *testing.T) {
 	}
 }
 
+// TestNextIDAndNextTokenAreDeterministic guards the same promise
+// TestIDsAreDeterministicForASeed makes for entity ids, but for the two
+// methods a provider facade uses to mint its own ids (webhook ids, event
+// ids, auto-generated auth tokens): they share the engine's seeded
+// counter, so the same seed and call sequence must produce the same
+// output here too.
+func TestNextIDAndNextTokenAreDeterministic(t *testing.T) {
+	start := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
+	e1 := newTestEngine(t, 55, start)
+	e2 := newTestEngine(t, 55, start)
+
+	if id1, id2 := e1.NextID("evt_"), e2.NextID("evt_"); id1 != id2 {
+		t.Fatalf("NextID() = %q vs %q, want identical for the same seed", id1, id2)
+	}
+	if tok1, tok2 := e1.NextToken(), e2.NextToken(); tok1 != tok2 {
+		t.Fatalf("NextToken() = %q vs %q, want identical for the same seed", tok1, tok2)
+	}
+
+	if id, prefix := e1.NextID("wh_"), "wh_"; len(id) <= len(prefix) || id[:len(prefix)] != prefix {
+		t.Errorf("NextID(%q) = %q, want it to start with the given prefix", prefix, id)
+	}
+}
+
 // scenarioSnapshot is the full outcome of runScenario, serialized for a
 // byte for byte comparison across runs.
 type scenarioSnapshot struct {

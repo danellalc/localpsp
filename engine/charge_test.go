@@ -75,6 +75,7 @@ func TestBillingTypeValid(t *testing.T) {
 		{"pix", BillingTypePix, true},
 		{"boleto", BillingTypeBoleto, true},
 		{"credit card", BillingTypeCreditCard, true},
+		{"undefined", BillingTypeUndefined, true},
 		{"unknown", BillingType("DEBIT_CARD"), false},
 		{"empty", BillingType(""), false},
 	}
