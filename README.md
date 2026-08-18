@@ -19,7 +19,9 @@ Stripe solved local development years ago with `stripe listen` and `stripe trigg
 ## Usage
 
 ```bash
-docker run -p 8420:8420 danellalc/localpsp
+docker run -p 8420:8420 danellalc/localpsp   # coming soon, not published yet, build from source for now:
+git clone https://github.com/danellalc/localpsp && cd localpsp
+go run ./cmd/localpsp serve
 ```
 
 Point your app at it instead of the real API. Same endpoints, same payloads, same webhook signatures:

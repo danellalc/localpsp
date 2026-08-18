@@ -35,7 +35,7 @@ New code belongs to exactly one layer. Provider-specific JSON, field names, even
 
 ## Hard rules
 
-**Fidelity is the product.** Facade responses are asserted against golden files (sanitized real sandbox responses) in CI. Never invent a field, event or behavior: if the provider's docs don't state it and the sandbox doesn't show it, it does not exist here. When in doubt, test against the real sandbox and record a golden. Every known divergence goes in FIDELITY.md, public and versioned.
+**Fidelity is the product.** The goal is facade responses asserted against golden files (sanitized real sandbox responses) in CI; that CI check does not exist yet, see FIDELITY.md for exactly where the facade's shapes actually come from today. What already holds regardless: never invent a field, event or behavior, if the provider's docs don't state it and the sandbox doesn't show it, it does not exist here. When in doubt, test against the real sandbox and record a golden. Every known divergence goes in FIDELITY.md, public and versioned.
 
 **Webhook semantics are sacred.** Delivery succeeds only on HTTP 2xx. Failures follow the provider's real retry schedule. After 15 consecutive failures the queue PAUSES: new events accumulate undelivered, exactly like production Asaas. Duplicate delivery re-sends the SAME event id. Each of these behaviors has a dedicated test.
 

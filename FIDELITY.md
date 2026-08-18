@@ -3,8 +3,8 @@
 Every known difference between localpsp and the real Asaas API, and every operational
 detail we've confirmed against Asaas's own docs. If something localpsp does isn't
 listed here as confirmed, don't trust it as fact yet, it may be a reasonable guess
-waiting on real verification (sandbox golden files, in Fase 2, or firsthand production
-experience).
+waiting on real verification (sandbox golden files, a later phase, or firsthand
+production experience).
 
 ## Confirmed against Asaas's official docs
 
@@ -109,8 +109,8 @@ doesn't implement it yet. Listed here instead of silently diverging.
   mechanism" (suggesting some kind of backoff), and no page we found states a precise
   schedule with a citable quote. localpsp uses a flat 30 second interval as a
   documented placeholder (`dispatch.DefaultRetryInterval`) until this gets checked
-  against real behavior, ideally by recording it against the sandbox once Fase 2 sets
-  that up, or from firsthand production observation. Don't treat the exact spacing
+  against real behavior, ideally by recording it against the sandbox once golden files
+  are in place, or from firsthand production observation. Don't treat the exact spacing
   between retries as fidelity-accurate yet, only the 2xx-or-fail policy, the 10 second
   timeout and the 15-failure threshold are confirmed.
 - **The whole `providers/asaas` facade is pending golden files.** Every field listed

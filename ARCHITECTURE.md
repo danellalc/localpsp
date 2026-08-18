@@ -22,7 +22,7 @@ Go because: single static binary, tiny Docker image, cross-platform CLI for free
 3. Webhook dispatcher   delivery, signatures, retry policy, queue semantics
 ```
 
-**The core is provider-agnostic.** A charge has a lifecycle (created → confirmed → received → overdue → refunded); providers differ in JSON shape, field names, signature scheme and event names. The facade translates; the engine owns truth. This is what makes Mercado Pago an adapter, not a rewrite: the same core/adapter discipline as autoseed and Attest.
+**The core is provider-agnostic.** A charge has a lifecycle (created → confirmed → received → overdue → refunded); providers differ in JSON shape, field names, signature scheme and event names. The facade translates; the engine owns truth. This is what makes Mercado Pago an adapter, not a rewrite: the same core/adapter discipline as autoseed.
 
 ## Control surface
 
@@ -34,7 +34,7 @@ Alongside the provider facade (which only speaks real Asaas routes), the same se
 
 An emulator that diverges from the real API is worse than none: it green-lights code that breaks in production. Three defenses:
 
-1. **Contract fixtures**: real sandbox responses (sanitized) recorded as golden files; facade responses are asserted byte-compatible in CI.
+1. **Contract fixtures** (not built yet): real sandbox responses (sanitized), recorded as golden files, with facade responses asserted byte-compatible in CI. Today the facade's JSON shape is grounded in Asaas's own docs, not a recorded sandbox response, see FIDELITY.md's "Open, not yet verified" section for exactly where this stands. This is the single biggest gap before this defense is real, not a defense that's already up.
 2. **The divergence ledger**: a public `FIDELITY.md` listing every known difference from the real API, honest and versioned. Stripe warns mocks "may differ in nuanced and potentially dangerous ways." This project writes those nuances down.
 3. **Provider version pinning**: the facade declares which API version it mirrors; provider API changes are tracked as issues.
 
