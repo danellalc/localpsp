@@ -70,8 +70,8 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 }
 
 // jsonErrorInterceptor rewrites net/http's default 404/405 responses
-// (plain text, no Content-Type) into this facade's own JSON error shape,
-// so every non-2xx response from this package looks the same to a client.
+// (plain text) into this facade's own JSON error shape, so every non-2xx
+// response from this package looks the same to a client.
 type jsonErrorInterceptor struct {
 	http.ResponseWriter
 	intercepting bool
@@ -80,11 +80,15 @@ type jsonErrorInterceptor struct {
 func (w *jsonErrorInterceptor) WriteHeader(status int) {
 	unmatched := status == http.StatusNotFound || status == http.StatusMethodNotAllowed
 	// A handler that already called writeJSON/writeError set Content-Type
-	// itself before reaching here; only net/http's own default responses
-	// (an unmatched route or method) leave it unset, that's the signal to
-	// intercept, not the status code alone: this facade's own handlers
-	// legitimately return 404 too (customer_not_found and friends).
-	alreadyHandled := w.ResponseWriter.Header().Get("Content-Type") != ""
+	// to exactly "application/json" itself before reaching here, that's
+	// the signal to leave it alone, not the status code alone: this
+	// facade's own handlers legitimately return 404 too (customer_not_found
+	// and friends). net/http's own default 404/405 responses aren't a
+	// blank Content-Type, net/http's internal http.Error sets
+	// "text/plain; charset=utf-8" before calling WriteHeader, so checking
+	// for merely non-empty here would (and once did) let that default
+	// response straight through unrewritten.
+	alreadyHandled := w.ResponseWriter.Header().Get("Content-Type") == "application/json"
 	if !unmatched || alreadyHandled {
 		w.ResponseWriter.WriteHeader(status)
 		return

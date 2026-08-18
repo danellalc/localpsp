@@ -64,6 +64,29 @@ func TestRegisterWebhookRequiresURL(t *testing.T) {
 	}
 }
 
+// TestUpdateWebhookRejectsEmptyURL guards a gap an audit found: the
+// create-webhook empty-URL rejection had a dedicated test
+// (TestRegisterWebhookRequiresURL), the update path's own, separate
+// check for the exact same thing (webhook.go's handleUpdateWebhook) did
+// not, so a regression there could silently let PUT clear a webhook's
+// URL to empty.
+func TestUpdateWebhookRejectsEmptyURL(t *testing.T) {
+	_, httpSrv := newTestServer(t, 1, dispatch.Options{})
+	whResp := request(t, http.MethodPost, httpSrv.URL+testBasePath+"/webhooks", webhookRequest{URL: "http://example.test/hook"})
+	var wh webhookResponse
+	whResp.decode(t, &wh)
+
+	resp := request(t, http.MethodPut, httpSrv.URL+testBasePath+"/webhooks/"+wh.ID, webhookUpdateRequest{URL: strPtr("")})
+	if resp.status != http.StatusBadRequest {
+		t.Fatalf("status = %d, want %d: %s", resp.status, http.StatusBadRequest, resp.body)
+	}
+	var errResp errorResponse
+	resp.decode(t, &errResp)
+	if len(errResp.Errors) != 1 || errResp.Errors[0].Code != "url_required" {
+		t.Errorf("errors = %+v, want a single url_required error", errResp.Errors)
+	}
+}
+
 // TestConcurrentWebhookUpdatesStayConsistent guards against a real race
 // caught in review: the registry write and the dispatch.UpdateEndpoint
 // write used to happen as two separate, unsynchronized steps, so two
