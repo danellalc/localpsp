@@ -81,6 +81,27 @@ Sourced from docs.asaas.com, checked in English and Portuguese where both exist.
   `checkoutSession`. engine.Interval matches the full `cycle` enum.
   Source: [Criar nova assinatura](https://docs.asaas.com/reference/criar-nova-assinatura).
 
+## Known gaps (confirmed real behavior, not built yet)
+
+These aren't open questions, the real behavior is confirmed above, localpsp just
+doesn't implement it yet. Listed here instead of silently diverging.
+
+- **No 14 day stale event eviction.** Real Asaas deletes events that have sat in a
+  paused queue for more than 14 days (see Event retention, above). localpsp's queue
+  has no eviction at all: an interrupted webhook's pending events, and the delivery
+  log itself, accumulate for as long as the process runs (or forever, with
+  `--persist`). Fine for a test run measured in minutes; a long-lived `localpsp serve`
+  process left interrupted for weeks would grow both without bound, unlike real Asaas.
+- **No cap on webhook registrations, and no delete route.** Real Asaas lets you list
+  and delete webhook configs; localpsp only has create and update. Nothing stops
+  registering an unbounded number of webhooks in a single run.
+- **Webhook URLs are trusted as-is.** Delivering to whatever URL a webhook config
+  names, including a private/internal address, is the entire point of an emulator
+  that calls your app back, so there's no SSRF-style URL filtering here, unlike a
+  service that should never let a caller point it at its own internal network.
+  Fine for local/CI use against your own app; don't expose a running `localpsp serve`
+  to untrusted callers.
+
 ## Open, not yet verified
 
 - **Exact interval between retry attempts.** Docs are inconsistent: one search summary

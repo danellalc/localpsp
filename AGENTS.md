@@ -21,7 +21,6 @@ A stateful local emulator of Brazilian payment providers (Asaas first), in the m
 ```bash
 go build ./...
 go test ./...              # everything
-go test ./... -short       # skips anything needing network fixtures
 go test -run TestQueueInterrupt ./...
 go vet ./... && golangci-lint run
 ```

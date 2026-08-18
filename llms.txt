@@ -43,7 +43,7 @@ localpsp chaos out-of-order --charge pay_123                 # CONFIRMED deliver
 
 - Webhook delivery counts as successful only on HTTP 2xx; otherwise the real retry schedule runs.
 - After 15 consecutive failures the webhook queue pauses: new events accumulate but are not delivered, mirroring production Asaas. `localpsp state` shows it; reactivation mirrors the real flow.
-- `PAYMENT_CONFIRMED` and `PAYMENT_RECEIVED` are distinct events with realistic timing (card settles D+32 by default on the virtual clock).
+- `PAYMENT_CONFIRMED` and `PAYMENT_RECEIVED` are distinct events, on purpose: in real Asaas, card settlement lands around D+32, so code that treats them as the same event risks double-crediting a customer. localpsp does not auto-fire `PAYMENT_RECEIVED` after any amount of virtual clock time; trigger it yourself with `localpsp trigger payment.received --charge <id>` whenever your test needs it.
 - Deterministic: seed + virtual clock fully determine ids, timestamps, payloads and delivery order.
 
 ## Common mistakes when using this tool

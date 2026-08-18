@@ -24,6 +24,10 @@ Go because: single static binary, tiny Docker image, cross-platform CLI for free
 
 **The core is provider-agnostic.** A charge has a lifecycle (created → confirmed → received → overdue → refunded); providers differ in JSON shape, field names, signature scheme and event names. The facade translates; the engine owns truth. This is what makes Mercado Pago an adapter, not a rewrite: the same core/adapter discipline as autoseed and Attest.
 
+## Control surface
+
+Alongside the provider facade (which only speaks real Asaas routes), the same server mounts a small fixed admin API under `/_localpsp/*`: `state`, `trigger`, `clock/advance` and `chaos/*`. This is what the CLI's `trigger`, `state`, `clock` and `chaos` subcommands actually call over HTTP; it is localpsp's own control surface, not something any real PSP exposes, and it isn't namespaced under a provider's base path since it has nothing to do with any one provider.
+
 ## The hard problems
 
 ### Fidelity is the product
@@ -80,7 +84,7 @@ Customers, charges (PIX/boleto/card), subscriptions. Webhook dispatch with real 
 `localpsp state` inspection UI (terminal first). Golden-file contract tests published. FIDELITY.md.
 
 **v2**
-Mercado Pago adapter (proves the facade/core split). Scenario files: declarative YAML describing a full payment saga for CI replay.
+Mercado Pago adapter (proves the facade/core split). Scenario files: declarative YAML describing a full payment saga for CI replay. Known debt this has to pay down first: `engine.Interval` and `engine.BillingType` currently use Asaas's own vocabulary (`WEEKLY`, `BOLETO`, ...) directly as their values, not a provider-agnostic one the facade translates, so a second provider is the point where engine actually has to stop knowing what Asaas calls things.
 
 **v3**
 Efí. Raw PIX (BACEN-style) if demand shows. Testcontainers module (`localpsp` as a first-class Testcontainers provider, meets .NET/Java/Go devs where they test).
