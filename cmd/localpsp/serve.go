@@ -21,7 +21,7 @@ func runServe(args []string) error {
 	fs := flag.NewFlagSet("serve", flag.ExitOnError)
 	addr := fs.String("addr", ":8420", "address to listen on")
 	seed := fs.Int64("seed", 1, "seed driving every generated id; the same seed and call sequence always produce the same ids")
-	dsn := fs.String("db", "", "SQLite database file path; empty uses an in-memory database")
+	dsn := fs.String("persist", "", "SQLite file path to persist state across restarts; empty uses an in-memory database")
 	basePath := fs.String("asaas-base-path", "/asaas/v3", "base path the Asaas facade mounts under")
 	if err := fs.Parse(args); err != nil {
 		return err
