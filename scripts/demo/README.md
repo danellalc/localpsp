@@ -1,45 +1,46 @@
 # Demo recording
 
-The fifteen seconds the README's GIF placeholder is waiting for: `docker run`,
-a customer and a charge created, `trigger payment.confirmed`, and the webhook
-landing in a second terminal.
+The fifteen seconds `docs/demo.gif` is made of: `docker run`, a customer and
+a charge created, `trigger payment.confirmed`, and the webhook landing.
 
-## Setup
+## Regenerating docs/demo.gif
 
-Two terminal panes, side by side.
+One command, no screen recorder involved:
 
-Left pane, the webhook receiver:
+```bash
+sh scripts/demo/record.sh
+```
+
+It builds a linux/amd64 `localpsp` from the current source, runs the exact
+sequence in `typed-demo.sh` inside a container with `asciinema` recording
+the terminal session, then renders that recording to `docs/demo.gif` with
+`agg`. Needs Docker, nothing else. Run this again after any change that'd
+show up in the demo (CLI output wording, JSON field names, timing) so the
+GIF never drifts from what the CLI actually does.
+
+`typed-demo.sh` is the actual script of the recording: starts the server,
+registers a webhook, creates a customer and a PIX charge, triggers
+`payment.confirmed`, then prints the receiver's log so the delivered event
+shows up in the same terminal. Each `type_line` call is a fake keystroke
+delay before a real command, everything after that is genuine output from
+a real `localpsp` binary, nothing in the recording is staged or edited in.
+
+## Trying the flow live instead of recording it
+
+Two terminal panes, side by side. Left, the webhook receiver:
 
 ```bash
 python3 scripts/demo/receiver.py
 ```
 
-Right pane, the actual demo:
+Right, the actual demo:
 
 ```bash
 sh scripts/demo/run.sh
 ```
 
-`run.sh` starts the container, registers a webhook pointed at the receiver,
-creates a customer and a PIX charge, then triggers `payment.confirmed`. The
-left pane prints the event the moment it arrives.
+`run.sh` starts the published container, registers a webhook pointed at the
+receiver, creates a customer and a PIX charge, then triggers
+`payment.confirmed`. The left pane prints the event the moment it arrives.
 
-## Recording it
-
-Any terminal recorder works (asciinema, a plain screen capture cropped to
-both panes, whatever you already have). A few things that make the result
-actually watchable:
-
-- Bump the terminal font size before recording, GIFs get shrunk hard in
-  READMEs and small text disappears.
-- Clear both panes right before hitting record.
-- Run `sh scripts/demo/run.sh` once uncounted first, so the Docker image is
-  already pulled locally and the real recording isn't stalled on a download.
-- Trim the recording so it starts right at the `docker run` and ends right
-  after the webhook prints, that's the fifteen-second story.
-
-## Cleanup
-
-```bash
-docker rm -f localpsp-demo
-```
+Cleanup: `docker rm -f localpsp-demo`.
