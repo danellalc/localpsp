@@ -6,7 +6,7 @@ Like [localstripe](https://github.com/adrienverge/localstripe) and [LocalStack](
 
 > Status: v0.1.0. The full loop works end to end (customers, charges, subscriptions, webhooks, the four chaos scenarios), the facade's JSON shapes are still grounded in Asaas's own docs rather than verified against recorded sandbox responses, see FIDELITY.md for exactly where that stands.
 
-> [GIF placeholder: will be recorded from the first real run before launch.]
+![docker run, a PIX charge, payment.confirmed triggered, the webhook arriving](docs/demo.gif)
 
 ## The problem
 
