@@ -249,12 +249,14 @@ func TestChaosQueueInterruptActuallyInterruptsTheQueue(t *testing.T) {
 func TestChaosOutOfOrderDeliversReceivedBeforeConfirmed(t *testing.T) {
 	var mu sync.Mutex
 	var order []string
+	var envelopes []eventEnvelope
 	arrived := make(chan struct{}, 2)
 	appServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		var env eventEnvelope
 		_ = json.NewDecoder(r.Body).Decode(&env)
 		mu.Lock()
 		order = append(order, env.Event)
+		envelopes = append(envelopes, env)
 		mu.Unlock()
 		arrived <- struct{}{}
 		w.WriteHeader(http.StatusOK)
@@ -298,9 +300,23 @@ func TestChaosOutOfOrderDeliversReceivedBeforeConfirmed(t *testing.T) {
 
 	mu.Lock()
 	got := append([]string(nil), order...)
+	gotEnvelopes := append([]eventEnvelope(nil), envelopes...)
 	mu.Unlock()
 	if len(got) != 2 || got[0] != "PAYMENT_RECEIVED" || got[1] != "PAYMENT_CONFIRMED" {
 		t.Errorf("delivery arrival order = %v, want [PAYMENT_RECEIVED PAYMENT_CONFIRMED]", got)
+	}
+
+	// Each envelope must carry the payment status that matched its own
+	// event at build time (RECEIVED, then CONFIRMED), not both frozen at
+	// the charge's final status: that would mean the reversed envelope
+	// content, not just the delivery order, was wrong.
+	if len(gotEnvelopes) == 2 {
+		if gotEnvelopes[0].Payment.Status != "RECEIVED" {
+			t.Errorf("first delivered envelope payment status = %q, want RECEIVED", gotEnvelopes[0].Payment.Status)
+		}
+		if gotEnvelopes[1].Payment.Status != "CONFIRMED" {
+			t.Errorf("second delivered envelope payment status = %q, want CONFIRMED", gotEnvelopes[1].Payment.Status)
+		}
 	}
 }
 
