@@ -226,6 +226,9 @@ func (e *Engine) CreateSubscription(ctx context.Context, in CreateSubscriptionIn
 	if !in.Interval.Valid() {
 		return nil, fmt.Errorf("%w: %q", ErrInvalidInterval, in.Interval)
 	}
+	if in.Amount <= 0 {
+		return nil, fmt.Errorf("%w: %d", ErrInvalidAmount, in.Amount)
+	}
 	if _, err := e.store.getCustomer(ctx, in.CustomerID); err != nil {
 		return nil, err
 	}
@@ -285,12 +288,15 @@ type Transition struct {
 // due charge flips to overdue and the full transition list comes back, or
 // (on any storage error) none of them do and the caller gets nil, err. A
 // partial batch is never possible, so a returned error always means the
-// database still matches what AdvanceClock reports.
+// database still matches what AdvanceClock reports, and the virtual clock
+// itself only actually moves once that's guaranteed: computing the target
+// time doesn't commit it, so a storage failure can never leave the clock
+// stranded ahead of what got persisted.
 func (e *Engine) AdvanceClock(ctx context.Context, d time.Duration) ([]Transition, error) {
 	e.mu.Lock()
 	defer e.mu.Unlock()
 
-	now := e.clock.Advance(d)
+	now := e.clock.Now().Add(d)
 
 	due, err := e.store.listChargesDue(ctx, StatusCreated, now)
 	if err != nil {
@@ -317,5 +323,6 @@ func (e *Engine) AdvanceClock(ctx context.Context, d time.Duration) ([]Transitio
 	if err := e.store.updateChargeStatuses(ctx, updates); err != nil {
 		return nil, err
 	}
+	e.clock.Advance(d)
 	return transitions, nil
 }

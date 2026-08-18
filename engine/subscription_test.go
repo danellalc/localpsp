@@ -107,6 +107,31 @@ func TestCreateSubscriptionRejectsInvalidBillingType(t *testing.T) {
 	}
 }
 
+// TestCreateSubscriptionRejectsNonPositiveAmount guards against a real
+// gap caught in review: CreateCharge validates Amount > 0, but its
+// sibling CreateSubscription didn't, so calling engine's public API
+// directly (as a future provider adapter would) could silently persist a
+// subscription with a zero or negative amount.
+func TestCreateSubscriptionRejectsNonPositiveAmount(t *testing.T) {
+	ctx := context.Background()
+	e := newTestEngine(t, 1, time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC))
+	cust, err := e.CreateCustomer(ctx, CreateCustomerInput{Name: "Eva", Email: "eva@example.com"})
+	if err != nil {
+		t.Fatalf("CreateCustomer() error = %v", err)
+	}
+
+	_, err = e.CreateSubscription(ctx, CreateSubscriptionInput{
+		CustomerID:  cust.ID,
+		BillingType: BillingTypePix,
+		Interval:    IntervalMonthly,
+		Amount:      0,
+		NextDueDate: time.Date(2026, 2, 1, 0, 0, 0, 0, time.UTC),
+	})
+	if !errors.Is(err, ErrInvalidAmount) {
+		t.Fatalf("CreateSubscription() error = %v, want ErrInvalidAmount", err)
+	}
+}
+
 func TestCreateSubscriptionRejectsInvalidInterval(t *testing.T) {
 	ctx := context.Background()
 	e := newTestEngine(t, 1, time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC))

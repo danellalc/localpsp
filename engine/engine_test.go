@@ -23,6 +23,45 @@ func newTestEngine(t *testing.T, seed int64, start time.Time) *Engine {
 	return e
 }
 
+// TestAdvanceClockDoesNotMoveTheClockOnStorageFailure guards against a
+// real bug caught in review: AdvanceClock used to call clock.Advance
+// unconditionally as its first step, so a storage failure (a canceled
+// request context, which providers/asaas's admin handler passes straight
+// through from the HTTP request, is a realistic trigger, not just a
+// theoretical one) left the virtual clock permanently moved forward even
+// though the caller was told nothing happened, silently breaking the
+// project's determinism guarantee for every call after it.
+func TestAdvanceClockDoesNotMoveTheClockOnStorageFailure(t *testing.T) {
+	start := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
+	e := newTestEngine(t, 1, start)
+
+	before := e.Now()
+
+	canceled, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	if _, err := e.AdvanceClock(canceled, 72*time.Hour); err == nil {
+		t.Fatal("AdvanceClock() with a canceled context returned no error, want one")
+	}
+
+	if got := e.Now(); !got.Equal(before) {
+		t.Fatalf("Now() = %v after a failed AdvanceClock, want unchanged %v", got, before)
+	}
+
+	// A subsequent, real call must still work normally and advance from
+	// the correct, unmoved starting point.
+	transitions, err := e.AdvanceClock(context.Background(), time.Hour)
+	if err != nil {
+		t.Fatalf("AdvanceClock() after the failed attempt error = %v", err)
+	}
+	if len(transitions) != 0 {
+		t.Fatalf("transitions = %+v, want none", transitions)
+	}
+	if want := before.Add(time.Hour); !e.Now().Equal(want) {
+		t.Fatalf("Now() = %v, want %v: the failed attempt's duration must not have been applied", e.Now(), want)
+	}
+}
+
 func TestChargeGoesOverdueWhenClockPassesDueDate(t *testing.T) {
 	ctx := context.Background()
 	start := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
@@ -81,6 +120,65 @@ func TestChargeGoesOverdueWhenClockPassesDueDate(t *testing.T) {
 	}
 	if stored.Status != StatusOverdue {
 		t.Fatalf("stored status = %s, want %s", stored.Status, StatusOverdue)
+	}
+}
+
+// TestAdvanceClockOrdersMultipleTransitionsByChargeID guards a gap caught
+// in review: every existing AdvanceClock test advanced exactly one due
+// charge, so AdvanceClock's own doc comment promise ("ordered by charge
+// id") was never actually exercised with more than one. This codebase
+// has a documented history of map-iteration-order bugs (the autoseed
+// lesson AGENTS.md references), the kind of regression this test exists
+// to catch.
+func TestAdvanceClockOrdersMultipleTransitionsByChargeID(t *testing.T) {
+	ctx := context.Background()
+	start := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
+	e := newTestEngine(t, 7, start)
+
+	cust, err := e.CreateCustomer(ctx, CreateCustomerInput{Name: "Multi", Email: "multi@example.com"})
+	if err != nil {
+		t.Fatalf("CreateCustomer() error = %v", err)
+	}
+
+	const n = 5
+	ids := make(map[string]bool, n)
+	for i := 0; i < n; i++ {
+		charge, err := e.CreateCharge(ctx, CreateChargeInput{
+			CustomerID:  cust.ID,
+			BillingType: BillingTypeBoleto,
+			Amount:      1000,
+			DueDate:     start.Add(24 * time.Hour),
+		})
+		if err != nil {
+			t.Fatalf("CreateCharge() %d error = %v", i, err)
+		}
+		ids[charge.ID] = true
+	}
+
+	transitions, err := e.AdvanceClock(ctx, 48*time.Hour)
+	if err != nil {
+		t.Fatalf("AdvanceClock() error = %v", err)
+	}
+	if len(transitions) != n {
+		t.Fatalf("len(transitions) = %d, want %d: %+v", len(transitions), n, transitions)
+	}
+
+	seen := make(map[string]bool, n)
+	for i, tr := range transitions {
+		if !ids[tr.ChargeID] {
+			t.Errorf("transition %d: ChargeID = %q, not one of the created charges", i, tr.ChargeID)
+		}
+		if seen[tr.ChargeID] {
+			t.Errorf("transition %d: ChargeID = %q duplicated", i, tr.ChargeID)
+		}
+		seen[tr.ChargeID] = true
+		if tr.To != StatusOverdue || tr.Charge == nil || tr.Charge.Status != StatusOverdue {
+			t.Errorf("transition %d = %+v, want an overdue transition with its Charge snapshot", i, tr)
+		}
+		if i > 0 && transitions[i-1].ChargeID >= tr.ChargeID {
+			t.Errorf("transitions out of order: %q then %q, want ascending charge id order",
+				transitions[i-1].ChargeID, tr.ChargeID)
+		}
 	}
 }
 
@@ -239,6 +337,71 @@ func TestCreateChargeRejectsNonPositiveAmount(t *testing.T) {
 	}
 }
 
+// TestGetChargeNotFound guards against a real gap caught in review:
+// GetCustomer and GetSubscription both had a dedicated not-found test,
+// GetCharge (called through the live Engine, not the entity directly)
+// didn't, even though it wraps the exact same ErrChargeNotFound plumbing
+// in store.go.
+func TestGetChargeNotFound(t *testing.T) {
+	ctx := context.Background()
+	e := newTestEngine(t, 1, time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC))
+
+	_, err := e.GetCharge(ctx, "pay_does_not_exist")
+	if !errors.Is(err, ErrChargeNotFound) {
+		t.Fatalf("GetCharge() error = %v, want ErrChargeNotFound", err)
+	}
+}
+
+// TestTransitionChargeUnknownCharge and
+// TestTransitionChargeRejectsInvalidTransition guard the same gap for
+// Engine.TransitionCharge: TestChargeTransition only ever exercises the
+// unexported Charge.Transition on a bare struct, never through the live
+// Engine API (its lock, its store lookup, its persistence step).
+func TestTransitionChargeUnknownCharge(t *testing.T) {
+	ctx := context.Background()
+	e := newTestEngine(t, 1, time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC))
+
+	_, err := e.TransitionCharge(ctx, "pay_does_not_exist", StatusConfirmed)
+	if !errors.Is(err, ErrChargeNotFound) {
+		t.Fatalf("TransitionCharge() error = %v, want ErrChargeNotFound", err)
+	}
+}
+
+func TestTransitionChargeRejectsInvalidTransition(t *testing.T) {
+	ctx := context.Background()
+	start := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
+	e := newTestEngine(t, 1, start)
+
+	cust, err := e.CreateCustomer(ctx, CreateCustomerInput{Name: "Gil", Email: "gil@example.com"})
+	if err != nil {
+		t.Fatalf("CreateCustomer() error = %v", err)
+	}
+	charge, err := e.CreateCharge(ctx, CreateChargeInput{
+		CustomerID:  cust.ID,
+		BillingType: BillingTypePix,
+		Amount:      1000,
+		DueDate:     start.Add(24 * time.Hour),
+	})
+	if err != nil {
+		t.Fatalf("CreateCharge() error = %v", err)
+	}
+
+	// created -> refunded is not a legal move (chargeTransitions).
+	_, err = e.TransitionCharge(ctx, charge.ID, StatusRefunded)
+	if !errors.Is(err, ErrInvalidTransition) {
+		t.Fatalf("TransitionCharge() error = %v, want ErrInvalidTransition", err)
+	}
+
+	// The rejected attempt must not have changed anything.
+	stored, err := e.GetCharge(ctx, charge.ID)
+	if err != nil {
+		t.Fatalf("GetCharge() error = %v", err)
+	}
+	if stored.Status != StatusCreated {
+		t.Fatalf("status after a rejected transition = %s, want unchanged %s", stored.Status, StatusCreated)
+	}
+}
+
 func TestIDsAreDeterministicForASeed(t *testing.T) {
 	ctx := context.Background()
 	start := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
@@ -325,6 +488,8 @@ func runScenario(t *testing.T, seed int64, start time.Time) string {
 		CustomerID:  cust.ID,
 		BillingType: BillingTypeCreditCard,
 		Interval:    IntervalMonthly,
+		Amount:      3000,
+		NextDueDate: start.Add(30 * 24 * time.Hour),
 	})
 	if err != nil {
 		t.Fatalf("CreateSubscription() error = %v", err)
