@@ -4,7 +4,7 @@ A fake but stateful server for Brazilian payment providers that you can run loca
 
 Like [localstripe](https://github.com/adrienverge/localstripe) and [LocalStack](https://localstack.cloud), but for the PSPs Brazilian applications actually integrate: Asaas first, Mercado Pago and Efí on the roadmap.
 
-> Status: in development. This README describes the design being built.
+> Status: v0.1.0. The full loop works end to end (customers, charges, subscriptions, webhooks, the four chaos scenarios), the facade's JSON shapes are still grounded in Asaas's own docs rather than verified against recorded sandbox responses, see FIDELITY.md for exactly where that stands.
 
 > [GIF placeholder: will be recorded from the first real run before launch.]
 
@@ -19,9 +19,13 @@ Stripe solved local development years ago with `stripe listen` and `stripe trigg
 ## Usage
 
 ```bash
-docker run -p 8420:8420 danellalc/localpsp   # coming soon, not published yet, build from source for now:
-git clone https://github.com/danellalc/localpsp && cd localpsp
-go run ./cmd/localpsp serve
+docker run -p 8420:8420 danellaclaudioluiz/localpsp
+```
+
+Or grab a prebuilt binary from the [releases page](https://github.com/danellalc/localpsp/releases), or install it with one line:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/danellalc/localpsp/main/install.sh | sh
 ```
 
 Point your app at it instead of the real API. Same endpoints, same payloads, same webhook signatures:

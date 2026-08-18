@@ -82,5 +82,5 @@ jobs:
           build-args: |
             VERSION=${{ github.ref_name }}
           tags: |
-            danellalc/localpsp:latest
-            danellalc/localpsp:${{ github.ref_name }}
+            danellaclaudioluiz/localpsp:latest
+            danellaclaudioluiz/localpsp:${{ github.ref_name }}

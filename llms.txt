@@ -7,15 +7,15 @@ Positioning: develop and run CI against localpsp; homologate against the provide
 Sibling projects by the same author: EFCore.AutoSeed (.NET), autoseed (Go).
 
 - Repo: github.com/danellalc/localpsp
-- Distribution: Docker image (danellalc/localpsp) and single static binary
+- Distribution: Docker image (danellaclaudioluiz/localpsp) and single static binary
 - Language-agnostic: your app talks HTTP to it; any stack works
 - License: MIT
-- Status: in development
+- Status: v0.1.0, full loop working end to end; golden-file fidelity verification still open, see FIDELITY.md
 
 ## Quick start
 
 ```bash
-docker run -p 8420:8420 danellalc/localpsp
+docker run -p 8420:8420 danellaclaudioluiz/localpsp
 ```
 
 Point your app's Asaas base URL at the emulator:
