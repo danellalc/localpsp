@@ -8,5 +8,6 @@ RUN CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o /out/localpsp ./cmd/loc
 FROM scratch
 COPY --from=build /out/localpsp /localpsp
 EXPOSE 8420
+USER 65532:65532
 ENTRYPOINT ["/localpsp"]
 CMD ["serve", "--addr", ":8420"]
