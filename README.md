@@ -36,13 +36,14 @@ Then make things happen:
 # simulate a PIX payment against a charge, fires the real webhook at your app
 localpsp trigger payment.confirmed --charge pay_123
 
-# the full lifecycle, with realistic timing
+# or jump straight to funds settled, no card D+32 wait
 localpsp trigger payment.received --charge pay_123
 
 # the tests nobody can run today:
-localpsp chaos duplicate-delivery --charge pay_123   # idempotency, finally testable
-localpsp chaos retry-storm --failures 5              # your backoff handling
-localpsp chaos queue-interrupt                       # Asaas pauses after 15 fails. Does your app notice?
+localpsp chaos duplicate-delivery --charge pay_123          # idempotency, finally testable
+localpsp chaos retry-storm --charge pay_123 --failures 5    # your backoff handling
+localpsp chaos queue-interrupt --charge pay_123             # Asaas pauses after 15 fails. Does your app notice?
+localpsp chaos out-of-order --charge pay_123                # CONFIRMED delivered after RECEIVED
 ```
 
 Deterministic: same seed, same sequence of events, byte-identical payloads. Built for CI.

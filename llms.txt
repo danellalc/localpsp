@@ -33,10 +33,10 @@ localpsp trigger payment.confirmed --charge pay_123   # fire a lifecycle event w
 localpsp trigger payment.received  --charge pay_123
 localpsp clock advance 3d                              # virtual time; overdue events fire
 localpsp state                                         # entities, deliveries, queue status
-localpsp chaos duplicate-delivery --charge pay_123     # same event id, twice (idempotency test)
-localpsp chaos retry-storm --failures 5                # exercise your backoff handling
-localpsp chaos queue-interrupt                         # simulate Asaas pausing after 15 failures
-localpsp chaos out-of-order                            # CONFIRMED delivered after RECEIVED
+localpsp chaos duplicate-delivery --charge pay_123           # same event id, twice (idempotency test)
+localpsp chaos retry-storm --charge pay_123 --failures 5     # exercise your backoff handling
+localpsp chaos queue-interrupt --charge pay_123              # simulate Asaas pausing after 15 failures
+localpsp chaos out-of-order --charge pay_123                 # CONFIRMED delivered after RECEIVED
 ```
 
 ## Key behaviors (the reason this exists)
