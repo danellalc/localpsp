@@ -395,6 +395,27 @@ func TestChaosRetryStormRejectsNonPositiveFailures(t *testing.T) {
 	}
 }
 
+// TestChaosRetryStormRejectsFailuresAtOrAboveThreshold guards against a
+// real bug caught in review: nothing stopped --failures from reaching the
+// dispatcher's real interruption threshold, silently turning a "retry
+// storm that eventually delivers" into a permanent, undelivered queue
+// interruption with no warning and a success response.
+func TestChaosRetryStormRejectsFailuresAtOrAboveThreshold(t *testing.T) {
+	_, httpSrv, payID := chaosFixture(t, "http://127.0.0.1:1/unreachable", dispatch.Options{FailureThreshold: 5})
+
+	resp := request(t, http.MethodPost, httpSrv.URL+"/_localpsp/chaos/retry-storm", map[string]any{
+		"charge": payID, "failures": 5,
+	})
+	if resp.status != http.StatusBadRequest {
+		t.Fatalf("status = %d, want %d: %s", resp.status, http.StatusBadRequest, resp.body)
+	}
+	var errResp errorResponse
+	resp.decode(t, &errResp)
+	if len(errResp.Errors) != 1 || errResp.Errors[0].Code != "failures_too_high" {
+		t.Errorf("errors = %+v, want a single failures_too_high error", errResp.Errors)
+	}
+}
+
 func TestChaosScenariosRejectInvalidJSON(t *testing.T) {
 	paths := []string{
 		"/_localpsp/chaos/duplicate-delivery",

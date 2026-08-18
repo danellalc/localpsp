@@ -99,6 +99,16 @@ func (s *Server) handleChaosRetryStorm(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "failures_required", "failures must be a positive integer")
 		return
 	}
+	if threshold := s.dispatch.FailureThreshold(); req.Failures >= threshold {
+		// At or above the real interruption threshold, this stops being a
+		// "retry storm that eventually delivers" and silently becomes a
+		// permanent queue interruption instead, a different scenario this
+		// facade already offers on purpose as chaos queue-interrupt. Reject
+		// instead of quietly doing something other than what was asked.
+		writeError(w, http.StatusBadRequest, "failures_too_high",
+			fmt.Sprintf("failures must be less than %d (the queue's real interruption threshold); use chaos queue-interrupt if that's what you want", threshold))
+		return
+	}
 
 	ev, ok := s.resolveChaosTarget(w, r, req.Charge)
 	if !ok {
