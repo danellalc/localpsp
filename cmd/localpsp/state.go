@@ -9,6 +9,7 @@ import (
 	"strconv"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	"github.com/mattn/go-isatty"
 )
@@ -139,14 +140,18 @@ func formatState(st adminState, color bool) string {
 // set) is applied afterward, so ANSI escape codes never throw the
 // alignment off.
 func table(b *strings.Builder, headers []string, rows [][]string, colorize func(col int, s string) string) {
+	// utf8.RuneCountInString, not len: a byte count overstates the width
+	// of any cell with an accented character (routine in Portuguese names
+	// like "José" or "Conceição"), since those take more bytes than
+	// visible columns in UTF-8, which would misalign every other row.
 	widths := make([]int, len(headers))
 	for i, h := range headers {
-		widths[i] = len(h)
+		widths[i] = utf8.RuneCountInString(h)
 	}
 	for _, row := range rows {
 		for i, cell := range row {
-			if len(cell) > widths[i] {
-				widths[i] = len(cell)
+			if w := utf8.RuneCountInString(cell); w > widths[i] {
+				widths[i] = w
 			}
 		}
 	}
@@ -159,7 +164,7 @@ func table(b *strings.Builder, headers []string, rows [][]string, colorize func(
 			}
 			b.WriteString(text)
 			if i < len(cells)-1 {
-				b.WriteString(strings.Repeat(" ", widths[i]-len(cell)))
+				b.WriteString(strings.Repeat(" ", widths[i]-utf8.RuneCountInString(cell)))
 				b.WriteString("  ")
 			}
 		}

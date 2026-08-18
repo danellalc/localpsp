@@ -99,6 +99,50 @@ func TestFormatStateShowsOnlyRecentDeliveries(t *testing.T) {
 	}
 }
 
+// TestTableAlignsAccentedNames guards against a real bug caught in
+// review: table() sized the first column with len() (a UTF-8 byte
+// count), which overstates the width of any cell with an accented
+// character, routine in Portuguese names like "José" or "Conceição",
+// this tool's actual audience. That pushed the second column's start
+// position out of alignment on every row containing one.
+func TestTableAlignsAccentedNames(t *testing.T) {
+	var b strings.Builder
+	table(&b, []string{"NAME", "EMAIL"}, [][]string{
+		{"José", "jose@example.test"},
+		{"Bea", "bea@example.test"},
+	}, nil)
+
+	lines := strings.Split(strings.TrimRight(b.String(), "\n"), "\n")
+	if len(lines) != 3 {
+		t.Fatalf("got %d lines, want 3 (header + 2 rows):\n%q", len(lines), b.String())
+	}
+
+	// secondColumnStart returns the rune index where the second column's
+	// text begins: past the first field, past the run of spaces after it.
+	secondColumnStart := func(line string) int {
+		runes := []rune(line)
+		i := 0
+		for i < len(runes) && runes[i] != ' ' {
+			i++
+		}
+		for i < len(runes) && runes[i] == ' ' {
+			i++
+		}
+		return i
+	}
+	// "José" is 4 visible characters but 5 bytes (é is two bytes in
+	// UTF-8), the widest of the three column-0 values ("NAME", "José",
+	// "Bea") either way; a byte-length width would compute 5 here instead
+	// of 4, pushing this row's EMAIL column one character later than the
+	// other two.
+	want := secondColumnStart(lines[0])
+	for i, line := range lines[1:] {
+		if got := secondColumnStart(line); got != want {
+			t.Errorf("row %d: second column starts at rune %d, want %d (misaligned): %q", i, got, want, line)
+		}
+	}
+}
+
 func TestFormatAmount(t *testing.T) {
 	tests := []struct {
 		cents int64
