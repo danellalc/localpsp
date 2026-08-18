@@ -33,17 +33,17 @@ localpsp trigger payment.confirmed --charge pay_123   # fire a lifecycle event w
 localpsp trigger payment.received  --charge pay_123
 localpsp clock advance 3d                              # virtual time; overdue events fire
 localpsp state                                         # entities, deliveries, queue status
-localpsp chaos duplicate-delivery --charge pay_123     # same event id, twice (idempotency test)
-localpsp chaos retry-storm --failures 5                # exercise your backoff handling
-localpsp chaos queue-interrupt                         # simulate Asaas pausing after 15 failures
-localpsp chaos out-of-order                            # CONFIRMED delivered after RECEIVED
+localpsp chaos duplicate-delivery --charge pay_123           # same event id, twice (idempotency test)
+localpsp chaos retry-storm --charge pay_123 --failures 5     # exercise your backoff handling
+localpsp chaos queue-interrupt --charge pay_123              # simulate Asaas pausing after 15 failures
+localpsp chaos out-of-order --charge pay_123                 # CONFIRMED delivered after RECEIVED
 ```
 
 ## Key behaviors (the reason this exists)
 
 - Webhook delivery counts as successful only on HTTP 2xx; otherwise the real retry schedule runs.
 - After 15 consecutive failures the webhook queue pauses: new events accumulate but are not delivered, mirroring production Asaas. `localpsp state` shows it; reactivation mirrors the real flow.
-- `PAYMENT_CONFIRMED` and `PAYMENT_RECEIVED` are distinct events with realistic timing (card settles D+32 by default on the virtual clock).
+- `PAYMENT_CONFIRMED` and `PAYMENT_RECEIVED` are distinct events, on purpose: in real Asaas, card settlement lands around D+32, so code that treats them as the same event risks double-crediting a customer. localpsp does not auto-fire `PAYMENT_RECEIVED` after any amount of virtual clock time; trigger it yourself with `localpsp trigger payment.received --charge <id>` whenever your test needs it.
 - Deterministic: seed + virtual clock fully determine ids, timestamps, payloads and delivery order.
 
 ## Common mistakes when using this tool

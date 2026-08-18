@@ -21,22 +21,21 @@ A stateful local emulator of Brazilian payment providers (Asaas first), in the m
 ```bash
 go build ./...
 go test ./...              # everything
-go test ./... -short       # skips anything needing network fixtures
 go test -run TestQueueInterrupt ./...
 go vet ./... && golangci-lint run
 ```
 
 ## The three layers
 
-1. `engine` — entities, lifecycles (state machine), virtual clock, seeded ids. Knows NO provider.
-2. `dispatch` — webhook delivery, signatures, retry policy, queue semantics.
-3. `providers/asaas` — HTTP facade translating the real API surface to engine calls.
+1. `engine`: entities, lifecycles (state machine), virtual clock, seeded ids. Knows NO provider.
+2. `dispatch`: webhook delivery, signatures, retry policy, queue semantics.
+3. `providers/asaas`: HTTP facade translating the real API surface to engine calls.
 
 New code belongs to exactly one layer. Provider-specific JSON, field names, event names and signature schemes live ONLY in the facade.
 
 ## Hard rules
 
-**Fidelity is the product.** Facade responses are asserted against golden files (sanitized real sandbox responses) in CI. Never invent a field, event or behavior: if the provider's docs don't state it and the sandbox doesn't show it, it does not exist here. When in doubt, test against the real sandbox and record a golden. Every known divergence goes in FIDELITY.md, public and versioned.
+**Fidelity is the product.** The goal is facade responses asserted against golden files (sanitized real sandbox responses) in CI; that CI check does not exist yet, see FIDELITY.md for exactly where the facade's shapes actually come from today. What already holds regardless: never invent a field, event or behavior, if the provider's docs don't state it and the sandbox doesn't show it, it does not exist here. When in doubt, test against the real sandbox and record a golden. Every known divergence goes in FIDELITY.md, public and versioned.
 
 **Webhook semantics are sacred.** Delivery succeeds only on HTTP 2xx. Failures follow the provider's real retry schedule. After 15 consecutive failures the queue PAUSES: new events accumulate undelivered, exactly like production Asaas. Duplicate delivery re-sends the SAME event id. Each of these behaviors has a dedicated test.
 

@@ -6,23 +6,25 @@ Like [localstripe](https://github.com/adrienverge/localstripe) and [LocalStack](
 
 > Status: in development. This README describes the design being built.
 
-> [GIF placeholder — will be recorded from the first real run before launch.]
+> [GIF placeholder: will be recorded from the first real run before launch.]
 
 ## The problem
 
 Every developer integrating payments in Brazil lives the same loop: create a sandbox account, configure a webhook URL, expose your laptop with ngrok (the official Asaas docs literally recommend this), create a test charge, simulate payment in their dashboard, wait, and hope the event arrives. For every flow. Every time.
 
-And the sandbox can't simulate what actually breaks in production: duplicate webhook deliveries hitting your idempotency logic, the retry storm after your deploy window, or Asaas silently pausing your webhook queue after 15 consecutive failures — new events keep queueing but stop being delivered, and nothing tells you.
+And the sandbox can't simulate what actually breaks in production: duplicate webhook deliveries hitting your idempotency logic, the retry storm after your deploy window, or Asaas silently pausing your webhook queue after 15 consecutive failures. New events keep queueing but stop being delivered, and nothing tells you.
 
-Stripe solved local development years ago with `stripe listen` and `stripe trigger`. Stripe's own mock is stateless and doesn't send webhooks — and Stripe explicitly points to community tools for anything more. In Brazil, there is no community tool. Until now.
+Stripe solved local development years ago with `stripe listen` and `stripe trigger`. Stripe's own mock is stateless and doesn't send webhooks, and Stripe explicitly points to community tools for anything more. In Brazil, there is no community tool. Until now.
 
 ## Usage
 
 ```bash
-docker run -p 8420:8420 danellalc/localpsp
+docker run -p 8420:8420 danellalc/localpsp   # coming soon, not published yet, build from source for now:
+git clone https://github.com/danellalc/localpsp && cd localpsp
+go run ./cmd/localpsp serve
 ```
 
-Point your app at it instead of the real API — same endpoints, same payloads, same webhook signatures:
+Point your app at it instead of the real API. Same endpoints, same payloads, same webhook signatures:
 
 ```
 ASAAS_API_URL=http://localhost:8420/asaas/v3
@@ -33,16 +35,17 @@ Create customers and charges exactly as you would against the real Asaas API. lo
 Then make things happen:
 
 ```bash
-# simulate a PIX payment against a charge — fires the real webhook at your app
+# simulate a PIX payment against a charge, fires the real webhook at your app
 localpsp trigger payment.confirmed --charge pay_123
 
-# the full lifecycle, with realistic timing
+# or jump straight to funds settled, no card D+32 wait
 localpsp trigger payment.received --charge pay_123
 
 # the tests nobody can run today:
-localpsp chaos duplicate-delivery --charge pay_123   # idempotency, finally testable
-localpsp chaos retry-storm --failures 5              # your backoff handling
-localpsp chaos queue-interrupt                       # Asaas pauses after 15 fails. Does your app notice?
+localpsp chaos duplicate-delivery --charge pay_123          # idempotency, finally testable
+localpsp chaos retry-storm --charge pay_123 --failures 5    # your backoff handling
+localpsp chaos queue-interrupt --charge pay_123             # Asaas pauses after 15 fails. Does your app notice?
+localpsp chaos out-of-order --charge pay_123                # CONFIRMED delivered after RECEIVED
 ```
 
 Deterministic: same seed, same sequence of events, byte-identical payloads. Built for CI.
@@ -51,7 +54,7 @@ Deterministic: same seed, same sequence of events, byte-identical payloads. Buil
 
 ### Stateful, like the real thing
 
-Create a charge, it exists. Pay it, its status changes. Query it, you get what a real PSP would return. Your integration code runs unmodified — no `if (testing)` branches, no mock injection, any language.
+Create a charge, it exists. Pay it, its status changes. Query it, you get what a real PSP would return. Your integration code runs unmodified: no `if (testing)` branches, no mock injection, any language.
 
 ### It simulates production behavior, not just the API
 
@@ -69,11 +72,11 @@ localpsp makes every row testable, locally, in CI.
 
 ### Deterministic
 
-Same seed, same events, same payloads, same order. A flaky payment test is a useless payment test. (Same discipline as [EFCore.AutoSeed](https://github.com/danellalc/EFCore.AutoSeed) — same author.)
+Same seed, same events, same payloads, same order. A flaky payment test is a useless payment test. (Same discipline as [EFCore.AutoSeed](https://github.com/danellalc/EFCore.AutoSeed), same author.)
 
 ### Honest about what it is
 
-**Develop and run CI against localpsp. Homologate against the real sandbox once, at the end.** A mock can never behave exactly like the real API and may differ in nuanced ways — Stripe says this about their own mock, and it applies here too. localpsp kills the two hundred sandbox round-trips during development; it does not replace the final homologation checklist.
+**Develop and run CI against localpsp. Homologate against the real sandbox once, at the end.** A mock can never behave exactly like the real API and may differ in nuanced ways. Stripe says this about their own mock, and it applies here too. localpsp kills the two hundred sandbox round-trips during development; it does not replace the final homologation checklist.
 
 ## Providers
 
@@ -97,11 +100,11 @@ One container, all providers, each under its own route prefix.
 
 ## Compared to
 
-- **ngrok + real sandbox** — the current official workflow. Works, but every test is a network round-trip, sandbox state is shared and drifts, and chaos scenarios are impossible.
-- **stripe-mock** — stateless, no webhooks, Stripe-only. Stripe points to community tools for more.
-- **localstripe** — the proof this category works: stateful, webhook-firing... and Stripe-only.
-- **hookmock / generic mock servers** — you hand-write every payload; they know nothing about PSP semantics, signatures, or lifecycles.
-- **WireMock / Prism** — great generic HTTP mocking; no state, no event lifecycle, no PSP behavior.
+- **ngrok + real sandbox**: the current official workflow. Works, but every test is a network round-trip, sandbox state is shared and drifts, and chaos scenarios are impossible.
+- **stripe-mock**: stateless, no webhooks, Stripe-only. Stripe points to community tools for more.
+- **localstripe**: the proof this category works: stateful, webhook-firing... and Stripe-only.
+- **hookmock / generic mock servers**: you hand-write every payload; they know nothing about PSP semantics, signatures, or lifecycles.
+- **WireMock / Prism**: great generic HTTP mocking; no state, no event lifecycle, no PSP behavior.
 
 ## License
 

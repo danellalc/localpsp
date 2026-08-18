@@ -1,0 +1,7 @@
+.git
+.github
+*.md
+*.txt
+CLAUDE.md
+PLANO.md
+docker-token.txt

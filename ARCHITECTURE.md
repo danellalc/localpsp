@@ -2,7 +2,7 @@
 
 ## Shape
 
-One binary (Go), one Docker image, one CLI. No external dependencies at runtime — state lives in embedded SQLite (in-memory by default, file-backed with `--persist`).
+One binary (Go), one Docker image, one CLI. No external dependencies at runtime: state lives in embedded SQLite (in-memory by default, file-backed with `--persist`).
 
 ```
 localpsp serve          the emulator: HTTP API + webhook dispatcher
@@ -11,7 +11,7 @@ localpsp chaos          fire the scenarios that hurt in production
 localpsp state          inspect / reset the emulator state
 ```
 
-Go because: single static binary, tiny Docker image, cross-platform CLI for free, and the webhook dispatcher is concurrency-shaped work. (Also the author's second ecosystem — see [autoseed](https://github.com/danellalc/autoseed).)
+Go because: single static binary, tiny Docker image, cross-platform CLI for free, and the webhook dispatcher is concurrency-shaped work. (Also the author's second ecosystem, see [autoseed](https://github.com/danellalc/autoseed).)
 
 ## The three layers
 
@@ -22,16 +22,20 @@ Go because: single static binary, tiny Docker image, cross-platform CLI for free
 3. Webhook dispatcher   delivery, signatures, retry policy, queue semantics
 ```
 
-**The core is provider-agnostic.** A charge has a lifecycle (created → confirmed → received → overdue → refunded); providers differ in JSON shape, field names, signature scheme and event names. The facade translates; the engine owns truth. This is what makes Mercado Pago an adapter, not a rewrite — the same core/adapter discipline as autoseed and Attest.
+**The core is provider-agnostic.** A charge has a lifecycle (created → confirmed → received → overdue → refunded); providers differ in JSON shape, field names, signature scheme and event names. The facade translates; the engine owns truth. This is what makes Mercado Pago an adapter, not a rewrite: the same core/adapter discipline as autoseed.
+
+## Control surface
+
+Alongside the provider facade (which only speaks real Asaas routes), the same server mounts a small fixed admin API under `/_localpsp/*`: `state`, `trigger`, `clock/advance` and `chaos/*`. This is what the CLI's `trigger`, `state`, `clock` and `chaos` subcommands actually call over HTTP; it is localpsp's own control surface, not something any real PSP exposes, and it isn't namespaced under a provider's base path since it has nothing to do with any one provider.
 
 ## The hard problems
 
 ### Fidelity is the product
 
-An emulator that diverges from the real API is worse than none — it green-lights code that breaks in production. Three defenses:
+An emulator that diverges from the real API is worse than none: it green-lights code that breaks in production. Three defenses:
 
-1. **Contract fixtures**: real sandbox responses (sanitized) recorded as golden files; facade responses are asserted byte-compatible in CI.
-2. **The divergence ledger**: a public `FIDELITY.md` listing every known difference from the real API, honest and versioned. Stripe warns mocks "may differ in nuanced and potentially dangerous ways" — this project writes those nuances down.
+1. **Contract fixtures** (not built yet): real sandbox responses (sanitized), recorded as golden files, with facade responses asserted byte-compatible in CI. Today the facade's JSON shape is grounded in Asaas's own docs, not a recorded sandbox response, see FIDELITY.md's "Open, not yet verified" section for exactly where this stands. This is the single biggest gap before this defense is real, not a defense that's already up.
+2. **The divergence ledger**: a public `FIDELITY.md` listing every known difference from the real API, honest and versioned. Stripe warns mocks "may differ in nuanced and potentially dangerous ways." This project writes those nuances down.
 3. **Provider version pinning**: the facade declares which API version it mirrors; provider API changes are tracked as issues.
 
 ### Webhook semantics, exactly right
@@ -40,7 +44,7 @@ This is where the author's fintech scar tissue becomes code:
 
 - **Signatures**: Asaas sends `asaas-access-token` header; the emulator signs identically, so your verification code runs unmodified.
 - **Delivery policy**: response status >= 200 and < 300 counts as delivered; anything else triggers the real retry schedule.
-- **Queue interruption**: after 15 consecutive failures, the queue pauses — new events accumulate but are NOT delivered, exactly like production Asaas. `localpsp state` shows the paused queue; un-pausing mirrors the real reactivation flow.
+- **Queue interruption**: after 15 consecutive failures, the queue pauses. New events accumulate but are NOT delivered, exactly like production Asaas. `localpsp state` shows the paused queue; un-pausing mirrors the real reactivation flow.
 - **Duplicates and ordering**: `chaos duplicate-delivery` re-sends a delivered event with the same event id (idempotency test); `chaos out-of-order` delivers CONFIRMED after RECEIVED.
 
 ### Time
@@ -63,26 +67,26 @@ Same seed, same everything. All ids derive from the seed (`pay_` + seeded hash),
 
 **Why stateful.** Stripe's own stateless mock can't test flows, and Stripe declined to add state, pointing to the community. State is the whole point: create, pay, query, verify.
 
-**Why chaos is first-class, not an afterthought.** The API-mirroring part is table stakes (any OpenAPI mocker does 60% of it). The moat is operational behavior: queue interruption, duplicates, retry storms — knowledge that comes from operating payments in production, not from reading docs.
+**Why chaos is first-class, not an afterthought.** The API-mirroring part is table stakes (any OpenAPI mocker does 60% of it). The moat is operational behavior: queue interruption, duplicates, retry storms (knowledge that comes from operating payments in production, not from reading docs).
 
-**Why Asaas first.** The author integrates it this month (Selar, desapega.do) — dogfooding from week one. It also has the best-documented webhook semantics to mirror.
+**Why Asaas first.** The author integrates it this month (desapega.do), dogfooding from week one. It also has the best-documented webhook semantics to mirror.
 
 **Why SQLite embedded.** Zero-dependency container, `--persist` for local dev sessions, `:memory:` for CI speed. State small enough that anything heavier is ceremony.
 
-**Why MIT.** Category tools win by adoption (LocalStack, localstripe). Monetization, if ever, comes later via a pro scenario pack — not by gating the core.
+**Why MIT.** Category tools win by adoption (LocalStack, localstripe). Monetization, if ever, comes later via a pro scenario pack, not by gating the core.
 
 ## Roadmap
 
-**v1 — Asaas, whole loop**
+**v1: Asaas, whole loop**
 Customers, charges (PIX/boleto/card), subscriptions. Webhook dispatch with real signatures and retry policy. `trigger` for the full lifecycle. `chaos`: duplicate, retry-storm, queue-interrupt, out-of-order. Virtual clock. Deterministic seeds. Docker + single binary.
 
 **v1.x**
 `localpsp state` inspection UI (terminal first). Golden-file contract tests published. FIDELITY.md.
 
 **v2**
-Mercado Pago adapter (proves the facade/core split). Scenario files: declarative YAML describing a full payment saga for CI replay.
+Mercado Pago adapter (proves the facade/core split). Scenario files: declarative YAML describing a full payment saga for CI replay. Known debt this has to pay down first: `engine.Interval` and `engine.BillingType` currently use Asaas's own vocabulary (`WEEKLY`, `BOLETO`, ...) directly as their values, not a provider-agnostic one the facade translates, so a second provider is the point where engine actually has to stop knowing what Asaas calls things.
 
 **v3**
-Efí. Raw PIX (BACEN-style) if demand shows. Testcontainers module (`localpsp` as a first-class Testcontainers provider — meets .NET/Java/Go devs where they test).
+Efí. Raw PIX (BACEN-style) if demand shows. Testcontainers module (`localpsp` as a first-class Testcontainers provider, meets .NET/Java/Go devs where they test).
 
 **Out of scope, permanently:** real API proxying, real money, hosted service, providers outside payments, replacing homologation.
